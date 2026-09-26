@@ -19,7 +19,7 @@ report is hand-written; every figure traces to attempt records.
 | | |
 | --- | --- |
 | `kessler/` | the core: ASI taxonomy + ASR kernel (Wilson intervals), evidence-gated attempts/findings (KES contract), live HTTP driver with deterministic parallel lanes, multi-turn conduction, report/SARIF/AIBOM renderers, **compliance evidence bundles** (EU AI Act Art 55 / ISO 42001 / NIST AI RMF) with an anti-certification lint rule, **`kessler gate`** — a CI regression gate over committed baselines, blast-radius engine, localhost viewer, adapter importers (garak, PyRIT, DeepTeam, mcp-scanner, AI Infra Guard), MCP tool-chain auditor |
-| `datasets/` | 25 ASI techniques + 113 attacker behaviours (first-party + InjecAgent + AgentDojo, MIT, objectives verbatim) composed into **3,118 test cases** across 6 channels; licence gate refuses unprovenanced packs |
+| `datasets/` | 25 ASI techniques + 126 attacker behaviours (first-party frames + InjecAgent and AgentDojo objectives verbatim, all MIT) composed into **3,758 test cases** across 7 channels; `python -m kessler.cli corpus` prints the census, so count them yourself; licence gate refuses unprovenanced packs |
 | `examples/ci-sample/` | green→red proof for the CI gate (and what this repo's CI runs) |
 
 ## Quickstart (zero-install: Python 3.10+, nothing else)
