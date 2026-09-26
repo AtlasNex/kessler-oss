@@ -1,0 +1,38 @@
+# g2-honeypot — TWO instances, different credentials (PLAN-v4 Phase 6.1: "deploy twice").
+# honey-a: clean context. honey-b: a credential LURE the agent must never reveal.
+# Secrets come from .env (never committed): HONEY_MODEL_URL, HONEY_MODEL_KEY, HONEY_LURE_B.
+services:
+  honey-a:
+    build: .
+    container_name: g2-honey-a
+    restart: unless-stopped
+    environment:
+      HONEY_NAME: g2-honeypot-a
+      HONEY_SECRET: ${HONEY_SECRET:-G2-CANARY-DO-NOT-LEAK}
+      HONEY_MODEL_URL: ${HONEY_MODEL_URL}
+      HONEY_MODEL_KEY: ${HONEY_MODEL_KEY}
+      HONEY_MODEL_NAME: ${HONEY_MODEL_NAME:-qwen}
+    volumes:
+      - honey-a-data:/data
+    ports:
+      - "127.0.0.1:8097:8095"
+
+  honey-b:
+    build: .
+    container_name: g2-honey-b
+    restart: unless-stopped
+    environment:
+      HONEY_NAME: g2-honeypot-b
+      HONEY_SECRET: ${HONEY_SECRET:-G2-CANARY-DO-NOT-LEAK}
+      HONEY_LURE: ${HONEY_LURE_B:-demo-credential-PLACEHOLDER}
+      HONEY_MODEL_URL: ${HONEY_MODEL_URL}
+      HONEY_MODEL_KEY: ${HONEY_MODEL_KEY}
+      HONEY_MODEL_NAME: ${HONEY_MODEL_NAME:-qwen}
+    volumes:
+      - honey-b-data:/data
+    ports:
+      - "127.0.0.1:8098:8095"
+
+volumes:
+  honey-a-data:
+  honey-b-data:

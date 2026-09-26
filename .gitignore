@@ -1,0 +1,40 @@
+# --- third-party scanners: fetched, never committed ---
+# NB: ignore contents, not the directory, or git never descends to re-include LICENSES.md
+vendor/*
+!vendor/LICENSES.md
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.deepeval/
+.pytest_cache/
+.ruff_cache/
+
+# --- secrets & client data (NEVER commit) ---
+.env
+.env.*
+*.key
+*.pem
+creds*
+secrets*
+# client engagement material is confidential by contract
+engagements/
+clients/
+findings/
+reports/
+scans/
+
+# --- os / editor ---
+Thumbs.db
+.DS_Store
+desktop.ini
+*.swp
+
+# Generated report artefacts (CI writes the sample report here). Never deliverables — every report is
+# regenerated from the engagement document, and a committed report would be a stale copy of one.
+build/
+run-g2-live/
+run-a7-corpus/

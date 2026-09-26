@@ -1,0 +1,27 @@
+[project]
+name = "kessler"
+version = "0.1.0"
+description = "Agentic AI red teaming: orchestration, ASI01-ASI10 coverage, attack-success-rate measurement and report generation."
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "AtlasNex", email = "hello@atlasnex.com" }]
+
+# Deliberately empty: the core (taxonomy, ASR maths, report assembly) is stdlib-only.
+# Scanner adapters pull their own heavy deps into their own venv at vendor/ level.
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools.packages.find]
+include = ["kessler*"]
+
+# Canonical: `python tests/run_all.py` (zero deps — must work on a client laptop with nothing
+# installed). pytest also works and is the convention tooling detects: `python -m pytest`.
+# Our checks are named t_* (not pytest's default test_*), so declare the pattern rather than
+# rename them and break the dependency-free runner.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["t_*", "test_*"]
+addopts = "-q"

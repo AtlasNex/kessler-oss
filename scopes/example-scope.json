@@ -1,0 +1,41 @@
+{
+  "ref": "SAMPLE-R1-0001",
+  "client": "Sample Client (FICTIONAL — this file is a schema example, not a real engagement and not a result. Do not quote any figure from it.)",
+  "window": {
+    "start": "2026-09-01",
+    "end": "2026-09-05"
+  },
+  "note": "Example scope file. Note what is NOT here: a scope_sha256 field. The hash is computed from this file's bytes on load (D-018), because a hash a human types in cannot be trusted and cannot be checked.",
+  "targets": [
+    {
+      "id": "support-agent",
+      "kind": "agent",
+      "version": "2026.8 build 3412",
+      "reaches": [
+        "api:email",
+        "cred:db_read",
+        "tool:ticket_update"
+      ],
+      "notes": "Customer-support agent. Reads inbound email and attachments, updates tickets, sends replies."
+    },
+    {
+      "id": "knowledge-mcp",
+      "kind": "mcp_server",
+      "version": "1.4.2",
+      "reaches": [
+        "store:vector_index",
+        "tool:doc_search"
+      ],
+      "notes": "Retrieval MCP server. Untrusted documents are ingested here and surfaced into agent context."
+    }
+  ],
+  "exclusions": {
+    "ASI03": "Single-agent deployment with one static service identity; no per-user agent identity exists to abuse in this scope.",
+    "ASI04": "No agent-built artefacts are produced or imported; the supply chain is the vendor's, not the client's, and is out of scope for an R1.",
+    "ASI05": "No code-execution tool is exposed to either target in this scope.",
+    "ASI07": "One agent only; there is no inter-agent messaging path to test.",
+    "ASI08": "Cascading failure requires more than one agent; excluded by the same scope cap as ASI07.",
+    "ASI09": "No human approval gate exists in this deployment; the agent's actions are not human-confirmed.",
+    "ASI10": "Behavioural monitoring and kill-switch configuration were not made available for review."
+  }
+}

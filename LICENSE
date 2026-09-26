@@ -1,0 +1,14 @@
+PROPRIETARY — All rights reserved.
+
+Copyright (c) 2026 AtlasNex.
+
+This repository and its contents are confidential and proprietary. No part may be
+copied, modified, distributed, sublicensed, or used to provide a competing service
+without prior written permission from the copyright holder.
+
+Third-party components fetched into vendor/ are governed by their own licences; see
+vendor/LICENSES.md. Nothing in this licence grants rights to those components.
+
+Engagement deliverables prepared for a client are governed by that engagement's
+Statement of Work and confidentiality terms, which take precedence over this file
+for that client's material.

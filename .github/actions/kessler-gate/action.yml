@@ -1,0 +1,22 @@
+name: Kessler regression gate
+description: >
+  Zero-install CI gate for a Kessler engagement document (PLAN-v4 Phase 2).
+  Exit 0 = pass, 1 = significant ASR regression or coverage collapse, 2 = refusal
+  (scope drift, endpoint retargeting, or an invalid baseline). No pip, no setup step:
+  the Kessler core is stdlib-only (C-2), so this runs on whatever interpreter the
+  runner already has.
+inputs:
+  document:
+    description: Engagement JSON produced by `kessler run`
+    required: true
+  baseline:
+    description: Committed baseline JSON produced by `kessler gate <doc> --init --baseline <file>`
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: gate
+      shell: bash
+      run: |
+        PY=$(command -v python3 || command -v python)
+        PYTHONPATH="$GITHUB_ACTION_PATH/../../.." "$PY" -m kessler.cli gate "${{ inputs.document }}" --baseline "${{ inputs.baseline }}"

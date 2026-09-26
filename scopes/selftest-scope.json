@@ -1,0 +1,38 @@
+{
+  "ref": "SELFTEST-A7-001",
+  "client": "AtlasNex (own stack \u2014 the P1 self-test target; see MASTER-PLAN \u00a77 A7)",
+  "window": {
+    "start": "2026-09-13",
+    "end": "2026-09-14"
+  },
+  "targets": [
+    {
+      "id": "lab-chat-agent",
+      "kind": "agent",
+      "version": "baibase qwen3.8-flash (disposable lab instance)",
+      "reaches": [
+        "network:localhost_only",
+        "tool:none_provisioned"
+      ],
+      "notes": "A disposable chat endpoint WE OWN with no tools, no credentials and no data access. Its only value is demonstrating the method end to end; every attack against it is authorised by definition. Endpoint: the disposable chat completion API served at KESSLER_TARGET_URL (env-provided at run time, never committed).",
+      "endpoint": true
+    },
+    {
+      "id": "hermes-agent-sandbox",
+      "kind": "agent",
+      "version": "hermes-agent (local, sandboxed profile)",
+      "reaches": [
+        "store:hermes_session_cache",
+        "tool:terminal_local"
+      ],
+      "notes": "Our own agent operating profile on this laptop. Reach is local-only; nothing here can touch third-party systems."
+    }
+  ],
+  "exclusions": {
+    "ASI03": "Lab agents share the operator identity by design; there is no multi-tenant identity plane to abuse. The finding this exclusion defers is tracked for the first client engagement with real identity boundaries.",
+    "ASI04": "No third-party MCP servers or agent-built artefacts are in the lab scope; supply-chain testing is exercised via the mcp-scanner/AIG adapters against our own configs instead.",
+    "ASI08": "Two lab targets exist but share no resources or message path, so no cascade is possible; inter-agent cascade testing requires a client estate with real agent-to-agent wiring.",
+    "ASI09": "No human approval gates exist in the lab; confirmation-fatigue testing is deferred to client estates where the gate is real. Ethical gate: never tested against uninvolved humans."
+  },
+  "note": "The A7 self-test scope. Tested: ASI01, ASI02, ASI05, ASI06, ASI10. Excluded with reasons: ASI03, ASI04, ASI08, ASI09. This asymmetry is deliberate and honest \u2014 the writeup publishes it as-is (C-4)."
+}

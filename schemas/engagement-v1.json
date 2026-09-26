@@ -1,0 +1,455 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kessler/engagement/v1",
+  "title": "Kessler engagement",
+  "description": "The single source of truth for one engagement. Every deliverable (report, attestation letter, SARIF, AIBOM, coverage table, retest delta) is a pure function of this document. This JSON Schema is the versioned INTEROP CONTRACT for other tools; the authoritative validator is kessler/schema.py, which additionally re-asserts C-1 (an unevidenced success cannot be loaded) — a shape-valid document is not necessarily an acceptable one.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "engagement",
+    "targets",
+    "attempts",
+    "findings",
+    "exclusions",
+    "retest"
+  ],
+  "properties": {
+    "schema": {
+      "const": "kessler/engagement/v1",
+      "description": "Schema identifier. A loader MUST refuse any other value rather than best-effort parsing."
+    },
+    "engagement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref",
+        "client",
+        "window",
+        "scope_sha256",
+        "testers"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Engagement reference, e.g. KES-2026-0001."
+        },
+        "client": {
+          "type": "string",
+          "minLength": 1
+        },
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "end"
+          ],
+          "properties": {
+            "start": {
+              "type": "string",
+              "description": "ISO calendar date, YYYY-MM-DD."
+            },
+            "end": {
+              "type": "string",
+              "description": "ISO calendar date, YYYY-MM-DD."
+            }
+          }
+        },
+        "testers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Named testers (REPORT-SPEC section 1: testers named). A report that cannot say who did the work is unusable as evidence."
+        },
+        "scope_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the signed scope document. C-7: no request may be made against a target without a signed scope on disk, and this hash is what binds this document to that one."
+        }
+      }
+    },
+    "targets": {
+      "type": "array",
+      "description": "The scope cap in machine-readable form. Anything not listed here is out of scope until a change order (MASTER-PLAN 4.2).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "version",
+          "reaches",
+          "notes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique within the document."
+          },
+          "kind": {
+            "enum": [
+              "agent",
+              "mcp_server",
+              "tool",
+              "memory",
+              "model"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the component as deployed during testing (REPORT-SPEC section 1: version tested). Empty only when the client cannot provide one."
+          },
+          "reaches": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "What the target can reach, as prefix:name — e.g. cred:db, api:email. This is the blast radius the offer is about."
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "attempts": {
+      "type": "array",
+      "description": "Every attack attempt. succeeded=true REQUIRES non-empty observed (C-1).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "technique",
+          "succeeded",
+          "observed",
+          "payload",
+          "environment",
+          "at",
+          "adapter_ref"
+        ],
+        "properties": {
+          "category": {
+            "enum": [
+              "ASI01",
+              "ASI02",
+              "ASI03",
+              "ASI04",
+              "ASI05",
+              "ASI06",
+              "ASI07",
+              "ASI08",
+              "ASI09",
+              "ASI10"
+            ]
+          },
+          "technique": {
+            "type": "string",
+            "minLength": 1
+          },
+          "succeeded": {
+            "type": "boolean",
+            "description": "Did the ATTACK succeed — not the scanner's own label. Scanners disagree (garak passed=true means the attack FAILED). Conversion happens once, in kessler/polarity.py."
+          },
+          "observed": {
+            "type": "string",
+            "description": "The raw output that proves the attempt. Must be non-empty whenever succeeded is true."
+          },
+          "payload": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "description": "ISO 8601 timestamp, UTC."
+          },
+          "adapter_ref": {
+            "type": "string",
+            "description": "The producing scanner's own identifier for this attempt, so a reader can go from our report back to the raw scanner output."
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Reportable findings. Every field is load-bearing; a blank one is refused (D-008).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "category",
+          "title",
+          "severity",
+          "description",
+          "preconditions",
+          "expected",
+          "impact",
+          "reproduction",
+          "evidence",
+          "remediation_architectural_fix",
+          "remediation_guardrail_config",
+          "remediation_code_patch",
+          "threat_scenario",
+          "impact_analysis",
+          "finding_id",
+          "cvss_v4_vector",
+          "chained_with"
+        ],
+        "properties": {
+          "category": {
+            "enum": [
+              "ASI01",
+              "ASI02",
+              "ASI03",
+              "ASI04",
+              "ASI05",
+              "ASI06",
+              "ASI07",
+              "ASI08",
+              "ASI09",
+              "ASI10"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "severity": {
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What the flaw is (REPORT-SPEC section 5)."
+          },
+          "preconditions": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What an attacker needs before the attack works (REPORT-SPEC section 5). Blank is refused (D-008)."
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Observed vs expected: the delta IS the vulnerability (REPORT-SPEC section 5)."
+          },
+          "impact": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Business impact in the client's terms (REPORT-SPEC section 5)."
+          },
+          "reproduction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chained_with": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "ASI01",
+                "ASI02",
+                "ASI03",
+                "ASI04",
+                "ASI05",
+                "ASI06",
+                "ASI07",
+                "ASI08",
+                "ASI09",
+                "ASI10"
+              ]
+            }
+          },
+          "remediation_architectural_fix": {
+            "type": "string",
+            "minLength": 1,
+            "description": "System design and pipeline modifications (D-025 three-part remediation)."
+          },
+          "remediation_guardrail_config": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact regex, semantic classifier, or filter definition (D-025)."
+          },
+          "remediation_code_patch": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exemplary code or configuration patch (D-025)."
+          },
+          "threat_scenario": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The adversary's operational path, step by step (D-025)."
+          },
+          "impact_analysis": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "confidentiality",
+              "integrity",
+              "availability"
+            ],
+            "properties": {
+              "confidentiality": {
+                "enum": [
+                  "HIGH",
+                  "MEDIUM",
+                  "LOW",
+                  "NONE"
+                ]
+              },
+              "integrity": {
+                "enum": [
+                  "HIGH",
+                  "MEDIUM",
+                  "LOW",
+                  "NONE"
+                ]
+              },
+              "availability": {
+                "enum": [
+                  "HIGH",
+                  "MEDIUM",
+                  "LOW",
+                  "NONE"
+                ]
+              }
+            },
+            "description": "C-I-A impact per dimension (D-025)."
+          },
+          "finding_id": {
+            "type": "string",
+            "pattern": "^KES-[0-9]{4}-[0-9]{3}$",
+            "description": "Stable finding identifier, KES-YYYY-NNN (D-025). Allocated via kes.next_kes_id()."
+          },
+          "cvss_v4_vector": {
+            "type": "string",
+            "pattern": "^$|^CVSS:4\\.0(/[A-Z]{1,2}:[A-Za-z0-9.]+)+$",
+            "description": "OPTIONAL CVSS v4.0 vector — deterministic components only; supplements the ASR interval and never replaces it (D-005, D-025). Structural validation in kessler/kes.py."
+          }
+        }
+      }
+    },
+    "exclusions": {
+      "type": "object",
+      "description": "C-4: a category is tested, or excluded WITH a written reason, or it is missing. A blank reason is refused; 'missing' is the honest default and blocks report emission.",
+      "propertyNames": {
+        "enum": [
+          "ASI01",
+          "ASI02",
+          "ASI03",
+          "ASI04",
+          "ASI05",
+          "ASI06",
+          "ASI07",
+          "ASI08",
+          "ASI09",
+          "ASI10"
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "retest": {
+      "description": "Optional post-remediation re-run. Computed delta, never a hand-written claim.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseline_sha256",
+            "attempts"
+          ],
+          "properties": {
+            "baseline_sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "SHA-256 of the baseline engagement document this retest is compared against."
+            },
+            "attempts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/attempt"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "technique",
+        "succeeded",
+        "observed",
+        "payload",
+        "environment",
+        "at",
+        "adapter_ref"
+      ],
+      "properties": {
+        "category": {
+          "enum": [
+            "ASI01",
+            "ASI02",
+            "ASI03",
+            "ASI04",
+            "ASI05",
+            "ASI06",
+            "ASI07",
+            "ASI08",
+            "ASI09",
+            "ASI10"
+          ]
+        },
+        "technique": {
+          "type": "string",
+          "minLength": 1
+        },
+        "succeeded": {
+          "type": "boolean"
+        },
+        "observed": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "string"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "adapter_ref": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+name: ci
+
+# PLAN-v4 Phase 1-2: the public harness proves itself on every push — zero-install (C-2):
+# no pip, no setup-python, just the stdlib. The pipeline runs end to end on the example scope,
+# then the gate runs BOTH directions: the sample must pass and the planted regression must FAIL.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Plan: the denominator prints itself"
+        run: python3 -m kessler.cli plan scopes/example-scope.json
+
+      - name: "Run: echo driver records only what was attempted, fabricates nothing"
+        run: python3 -m kessler.cli run scopes/example-scope.json --tester "CI smoke" --driver echo
+
+      - name: The sample engagement must PASS the gate
+        uses: ./.github/actions/kessler-gate
+        with:
+          document: examples/ci-sample/engagement.json
+          baseline: examples/ci-sample/kessler-baseline.json
+
+      - name: The planted regression must FAIL the gate (proves the gate is not a rubber stamp)
+        id: planted
+        continue-on-error: true
+        uses: ./.github/actions/kessler-gate
+        with:
+          document: examples/ci-sample/planted-regression.json
+          baseline: examples/ci-sample/kessler-baseline.json
+
+      - name: Assert the planted regression was rejected
+        run: |
+          if [ "${{ steps.planted.outcome }}" != "failure" ]; then
+            echo "The planted regression PASSED the gate — the gate is a rubber stamp. FAIL." >&2
+            exit 1
+          fi
+          echo "Green on the sample, red on the planted regression. The gate works."
