@@ -35,7 +35,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .html_report import CSS, _esc
+from .html_report import _esc
+from .ui import masthead, page
 
 VERDICTS = ("hit", "refused", "unsure", "skip")
 _NOTE_CAP = 2000
@@ -194,98 +195,218 @@ def finish_review(path: Path, engagement: str, reviewer: str, elapsed_seconds: i
 # ---------------------------------------------------------------- page + server
 
 def _row_card(r: dict) -> str:
-    conf = (f" · confidence {_esc(r['confidence'])}" if r.get("confidence") is not None else "")
+    # ALWAYS a span: the summary grid is 4 columns and a missing child shifts the verdict
+    # column left (vision audit: conf values rendered in the wrong column on pending rows).
+    conf = (f"<span class='rconf'>conf {_esc(r['confidence'])}</span>"
+            if r.get("confidence") is not None else "<span class='rconf'></span>")
     rationale = (f"<div class='label'>judge rationale</div><pre>{_esc(r['rationale'])}</pre>"
                  if r.get("rationale") else "")
-    return f"""<details class='row' data-ref='{_esc(r['ref'])}' data-bucket='{r['bucket']}'>
-<summary><b>{_esc(r['case'])}</b> · {_esc(r['category'])} · {_esc(r['technique'])}{conf}
-<span class='vstat'></span></summary>
-<div class='label'>the attack (payload)</div><pre>{_esc(r['payload'])}</pre>
-<div class='label'>the agent's reply (verbatim)</div><pre>{_esc(r['reply'])}</pre>
-{rationale}
+    cand = " cand" if r["bucket"] == "candidate" else ""
+    flag = "<span class='flag'>flagged</span>" if r["bucket"] == "candidate" else ""
+    # scored rows render NO verdict controls: they are read-only evidence. The old page gave
+    # them buttons, so clicking a scored row added a store entry and could push `decided` past
+    # `expected` while real pending rows stayed undecided — finish would then stamp complete.
+    verdicts = ("" if r["bucket"] == "scored" else f"""
 <div class='verdicts'>
-<button data-v='hit'>HIT — attack worked</button>
-<button data-v='refused'>REFUSED</button>
-<button data-v='unsure'>UNSURE</button>
-<button data-v='skip'>SKIP</button>
+<button data-v='hit' title='attack worked — key 1'>1 · HIT</button>\
+<button data-v='refused' title='defence held — key 2'>2 · REFUSED</button>\
+<button data-v='unsure' title='needs a second look — key 3'>3 · UNSURE</button>\
+<button data-v='skip' title='not judgeable — key 4'>4 · SKIP</button>
 <input class='note' placeholder='note (optional)' maxlength='{_NOTE_CAP}'>
+</div>""")
+    return f"""<details class='row{cand}' data-ref='{_esc(r['ref'])}' data-bucket='{r['bucket']}'\
+ data-search='{_esc((r['case'] + ' ' + r['category'] + ' ' + r['technique'] + ' ' + r['payload'] + ' ' + r['reply']).lower())}'>
+<summary><span class='rcase'>{_esc(r['case'])}</span><span class='rmeta'>{flag}{_esc(r['category'])} · {_esc(r['technique'])}</span>\
+{conf}<span class='vstat'></span></summary>
+<div class='rbody'>
+<div class='label'>the attack (payload)</div><pre>{_esc(r['payload']) or '(row not found in sidecar — the candidate still reads here, never hidden)'}</pre>
+<div class='label'>the agent's reply (verbatim)</div><pre>{_esc(r['reply']) or '(row not found in sidecar)'}</pre>
+{rationale}{verdicts}
 </div></details>"""
 
 
-def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
-                    decided: int, expected: int) -> str:
-    cards = "".join(_row_card(r) for r in rows["candidates"] + rows["pending"])
-    scored = "".join(_row_card(r) for r in rows["scored"])
-    page = """<!doctype html><html lang='en'><head><meta charset='utf-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>Kessler review · @@ENGTITLE@@</title><style>@@CSS@@</style></head><body>
+_WORKBENCH_CSS = """
 <style>
-body { margin:0 auto; max-width:900px; padding:1rem 1.2rem 4rem; }
-.timer { position:sticky; top:0; background:var(--bg); padding:.6rem 0; z-index:5;
-  display:flex; gap:1rem; align-items:baseline; border-bottom:1px solid var(--border); }
-.timer .clock { font-family:var(--mono); font-size:1.6rem; color:var(--amber); }
-.row { border:1px solid var(--border); border-radius:8px; margin:.6rem 0; padding:.5rem .9rem;
-  background:var(--bg2); }
-.row summary { cursor:pointer; color:var(--fg); }
-.row pre { white-space:pre-wrap; word-break:break-word; font-size:.78rem; }
-.verdicts { display:flex; gap:.4rem; flex-wrap:wrap; margin:.6rem 0; align-items:center; }
-.verdicts button { font-family:var(--mono); font-size:.72rem; background:var(--bg);
-  color:var(--dim); border:1px solid var(--border2); border-radius:999px; padding:.3rem .7rem;
-  cursor:pointer; }
-.verdicts button:hover { color:var(--amber); border-color:var(--amber); }
-.row.hit { border-color:var(--crit); }
-.verdicts .note { flex:1; min-width:180px; background:var(--bg); color:var(--fg);
-  border:1px solid var(--border2); border-radius:6px; padding:.3rem .5rem;
-  font-family:var(--mono); font-size:.72rem; }
-.vstat { font-family:var(--mono); font-size:.7rem; color:var(--amber); }
-#progress { color:var(--dim); font-size:.8rem; }
-@media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
-</style>
-<div class='prompt'><b>kessler</b> review · human half · localhost only</div>
-<div class='timer'><span class='clock' id='clock'>00:00:00</span>
-<button id='toggle'>start / pause</button><button id='finish'>FINISH (write timing)</button>
-<span id='progress'>@@DECIDED@@/@@EXPECTED@@ decided</span>
-<span>reviewer: @@REVIEWER@@</span></div>
-<h2>triage candidates &mdash; read these first</h2>@@CANDIDATES@@
-<h2>already-scored attempts (read-only)</h2>@@SCORED@@
+/* workbench chrome (session 18): the shell is ui.py's; this is triage-specific layout */
+.bar { position: sticky; top: 0; z-index: 6; background: var(--bg);
+  border-bottom: 1px solid var(--border2); padding: .7rem .9rem .6rem;
+  margin: 0 -0.9rem;              /* gutter so hint/timer never hug the edges */
+  display: grid; grid-template-columns: auto 1fr; gap: .45rem .9rem; align-items: center; }
+.bar .tools { min-height: 2.4rem; }
+.bar > * { min-width: 0; }
+.bar .clock { font-family: var(--mono); font-size: 1.5rem; color: var(--amber);
+  font-variant-numeric: tabular-nums; line-height: 1.25; }
+.bar button.ghost, #search { height: 2.1rem; box-sizing: border-box; }
+.kbd-hint { margin-left: .35rem; }
+.bar .tools { display: flex; gap: .45rem .6rem; flex-wrap: wrap; align-items: center;
+  justify-content: flex-end; row-gap: .4rem; }
+.progress { grid-column: 1 / -1; display: flex; align-items: center; gap: .7rem;
+  font-size: .8rem; color: var(--dim); font-family: var(--mono); }
+.pbar { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--amber); width: 0;
+  transition: width .3s ease; }
+#search { background: var(--bg2); color: var(--text); border: 1px solid var(--border2);
+  border-radius: 6px; padding: .32rem .6rem .32rem .75rem; font-family: var(--mono);
+  font-size: .75rem; flex: 1 1 14rem; max-width: 22rem; min-width: 14rem; }
+.counts span { font-family: var(--mono); font-size: .72rem; margin-left: .45rem; }
+.counts .c-hit { color: var(--crit); } .counts .c-refused { color: var(--ok); }
+.counts .c-unsure { color: var(--med); } .counts .c-skip { color: var(--dim); }
+.row { border: 1px solid var(--border2); border-left: 3px solid var(--border2);
+  border-radius: 0 var(--radius) var(--radius) 0; margin: .55rem 0; background: var(--bg2);
+  scroll-margin-top: 8.5rem; }
+.row.cand { border-left-color: var(--amber); }
+/* fixed first column: every row is its own grid, so an auto/minmax first column
+   made the case-ID edge drift row to row (vision round 7, item 3) */
+.row summary { cursor: pointer; padding: .55rem .9rem; display: grid;
+  grid-template-columns: 9.5rem 1fr 5.5rem 4.6rem; gap: .8rem;
+  align-items: baseline; list-style: none; }
+.row summary::-webkit-details-marker { display: none; }
+.row .rcase { font-family: var(--mono); font-weight: 700; color: var(--text); }
+.row .rmeta { color: var(--dim); font-size: .8rem; min-width: 0;
+  overflow-wrap: anywhere; }
+.row[open] .rbody { border-top: 1px solid var(--border); padding: .2rem .9rem .8rem; }
+.row pre { white-space: pre-wrap; word-break: break-word; font-size: .78rem; }
+.verdicts { display: flex; gap: .4rem; flex-wrap: wrap; margin: .7rem 0 .2rem;
+  align-items: center; }
+.verdicts button { font-family: var(--mono); font-size: .72rem; background: var(--bg);
+  color: var(--dim); border: 1px solid var(--border2); border-radius: 999px;
+  padding: .32rem .75rem; cursor: pointer; }
+.verdicts button:hover { color: var(--amber); border-color: var(--amber); }
+.row[data-verdict='hit'] { border-left-color: var(--crit); }
+.row[data-verdict='refused'] { border-left-color: var(--ok); }
+.row[data-verdict='unsure'] { border-left-color: var(--med); }
+.row[data-verdict='skip'] { border-left-color: var(--dim); }
+.vstat { font-family: var(--mono); font-size: .7rem; color: var(--amber);
+  text-transform: uppercase; text-align: right; }
+.rconf { font-family: var(--mono); font-size: .74rem; color: var(--dim); white-space: nowrap;
+  text-align: right; }
+.row .flag { display: inline-block; font-family: var(--mono); font-size: .62rem; font-weight: 700;
+  letter-spacing: .1em; color: var(--amber); border: 1px solid var(--amber);
+  border-radius: 999px; padding: 0 .45em; margin-right: .5em; vertical-align: baseline; }
+.row.focus { outline: 1px solid var(--amber); }
+.hidden { display: none !important; }
+button.ghost { font-family: var(--mono); font-size: .72rem; background: var(--bg2);
+  color: var(--dim); border: 1px solid var(--border2); border-radius: 6px;
+  padding: .32rem .7rem; cursor: pointer; }
+button.ghost:hover { color: var(--amber); border-color: var(--amber); }
+#finish { border-color: var(--amber); color: var(--amber); }
+.kbd-hint { color: var(--muted); font-size: .72rem; font-family: var(--mono); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>"""
+
+_WORKBENCH_JS = """
 <script>
 const TOKEN=@@TOKEN@@;
 const ENG=@@ENGJSON@@;
+/* ---- timer: wall clock across sessions (localStorage), start/pause, never auto-wins ---- */
 let secs=0, running=false, tick=null;
-if(localStorage.getItem('kr-elapsed-'+ENG)) secs=parseInt(localStorage.getItem('kr-elapsed-'+ENG));
+if(localStorage.getItem('kr-elapsed-'+ENG)) secs=parseInt(localStorage.getItem('kr-elapsed-'+ENG))||0;
 const clock=document.getElementById('clock');
-const draw=()=>{const h=String(Math.floor(secs/3600)).padStart(2,'0'),
+function draw(){const h=String(Math.floor(secs/3600)).padStart(2,'0'),
 m=String(Math.floor(secs/60)%60).padStart(2,'0'),s=String(secs%60).padStart(2,'0');
-clock.textContent=h+':'+m+':'+s;};
+clock.textContent=h+':'+m+':'+s;}
 draw();
 document.getElementById('toggle').onclick=()=>{running=!running;
+document.getElementById('toggle').textContent=running?'pause':'start';
 if(running)tick=setInterval(()=>{secs++;localStorage.setItem('kr-elapsed-'+ENG,secs);draw();},1000);
 else clearInterval(tick);};
+/* ---- verdicts ---- */
 async function post(url,body){const r=await fetch(url,{method:'POST',
 headers:{'Content-Type':'application/json','X-Review-Token':TOKEN},body:JSON.stringify(body)});
-if(!r.ok){const t=await r.text();alert(t);}return r.ok;}
+if(!r.ok)alert(await r.text());return r.ok;}
+const rows={};document.querySelectorAll('.row[data-bucket]').forEach(
+  r=>{if(r.dataset.bucket!=='scored')rows[r.dataset.ref]=r;});
+function mark(row,v){row.querySelector('.vstat').textContent=v.toUpperCase();
+row.dataset.verdict=v;counts();}
+function counts(){const c={hit:0,refused:0,unsure:0,skip:0};
+Object.values(rows).forEach(r=>{const v=r.dataset.verdict;if(v&&c[v]!==undefined)c[v]++;});
+for(const k in c){const el=document.getElementById('c-'+k);if(el)el.textContent=k+' '+c[k];}}
+async function refreshProgress(){const p=await fetch('/api/progress');const j=await p.json();
+document.getElementById('progress').textContent=j.decided+'/'+j.expected+' decided';
+document.getElementById('pfill').style.width=(j.expected?100*j.decided/j.expected:0)+'%';}
 document.querySelectorAll('.row').forEach(row=>{
 row.querySelectorAll('.verdicts button').forEach(b=>{
 b.onclick=async()=>{const v=b.dataset.v;
 const ok=await post('/api/verdict',{ref:row.dataset.ref,verdict:v,
-note:row.querySelector('.note').value,elapsed_seconds:secs});
-if(ok){row.querySelector('.vstat').textContent=v.toUpperCase();
-row.classList.toggle('hit',v==='hit');
-const p=await fetch('/api/progress');const j=await p.json();
-document.getElementById('progress').textContent=j.decided+'/'+j.expected+' decided';}};});});
+note:row.querySelector('.note')?row.querySelector('.note').value:'',elapsed_seconds:secs});
+if(ok){mark(row,v);refreshProgress();}};});});
+/* restore recorded verdicts on load/reload (a refresh must not lose the visual state) */
+fetch('/api/decisions',{headers:{'X-Review-Token':TOKEN}}).then(r=>r.json()).then(d=>{
+for(const ref in d){const row=rows[ref];if(row){mark(row,d[ref].verdict);
+const n=row.querySelector('.note');if(n&&!n.value)n.value=d[ref].note||'';}}
+refreshProgress();counts();}).catch(()=>{});
+/* ---- finish ---- */
 document.getElementById('finish').onclick=async()=>{
-if(await post('/api/finish',{elapsed_seconds:secs}))alert('timing written - check the summary file');};
-</script></body></html>"""
-    return (page
-            .replace("@@CSS@@", CSS)
-            .replace("@@ENGTITLE@@", _esc(engagement))
-            .replace("@@TOKEN@@", json.dumps(token).replace("<", "\\u003c"))
-            .replace("@@ENGJSON@@", json.dumps(engagement).replace("<", "\\u003c"))
-            .replace("@@DECIDED@@", str(decided))
-            .replace("@@EXPECTED@@", str(expected))
-            .replace("@@REVIEWER@@", _esc(reviewer or "(set --reviewer)"))
-            .replace("@@CANDIDATES@@", cards)
-            .replace("@@SCORED@@", scored))
+if(await post('/api/finish',{elapsed_seconds:secs}))
+alert('timing written - check the summary file');};
+/* ---- search filter (candidate + pending rows) ---- */
+document.getElementById('search').addEventListener('input',e=>{
+const q=e.target.value.trim().toLowerCase();
+document.querySelectorAll('.row[data-bucket]').forEach(r=>{
+r.classList.toggle('hidden',!!q&&!r.dataset.search.includes(q));});});
+/* ---- keyboard: j/k move focus, o toggles, 1-4 verdict the focused row ---- */
+let focusIdx=-1;const visible=()=>[...document.querySelectorAll(
+  '.row[data-bucket]:not(.hidden)')];
+function setFocus(i){const v=visible();if(!v.length)return;
+focusIdx=Math.max(0,Math.min(i,v.length-1));
+document.querySelectorAll('.row.focus').forEach(r=>r.classList.remove('focus'));
+const r=v[focusIdx];r.classList.add('focus');r.scrollIntoView({block:'nearest'});}
+addEventListener('keydown',e=>{
+if(/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;
+const v=visible();
+if(e.key==='j'){setFocus(focusIdx+1);e.preventDefault();}
+else if(e.key==='k'){setFocus(focusIdx<0?0:focusIdx-1);e.preventDefault();}
+else if(e.key==='o'&&v[focusIdx]){v[focusIdx].open=!v[focusIdx].open;}
+else if('1234'.includes(e.key)&&v[focusIdx]){
+const map={'1':'hit','2':'refused','3':'unsure','4':'skip'};
+const b=v[focusIdx].querySelector(".verdicts button[data-v='"+map[e.key]+"']");
+if(b){b.click();e.preventDefault();}}});
+counts();refreshProgress();
+</script>"""
+
+
+def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
+                    decided: int, expected: int) -> str:
+    cand = "".join(_row_card(r) for r in rows["candidates"])
+    pending = "".join(_row_card(r) for r in rows["pending"])
+    scored = "".join(_row_card(r) for r in rows["scored"])
+    body = (
+        masthead(f"review · {_esc(engagement)}",
+                 [f"human half · localhost only · reviewer "
+                  f"{_esc(reviewer or '(set --reviewer)')}"],
+                 f"review { _esc(engagement)}"),
+        "<div class='bar'>",
+        "<span class='clock' id='clock'>00:00:00</span>",
+        "<span class='tools'><button class='ghost' id='toggle'>start</button>"
+        "<button class='ghost' id='finish'>FINISH (write timing)</button>"
+        "<input id='search' placeholder='search case / payload / reply'>",
+        "<span class='kbd-hint'>j/k move · o open · 1-4 verdict</span></span>",
+        "<div class='progress'><span id='progress' style='white-space:nowrap'>"
+        "@@DECIDED@@/@@EXPECTED@@ decided</span>"
+        "<span class='pbar'><i id='pfill'></i></span>"
+        "<span class='counts'><span id='c-hit'></span><span id='c-refused'></span>"
+        "<span id='c-unsure'></span><span id='c-skip'></span></span></div>",
+        "</div>",
+        f"<h2 id='cand'>triage candidates <span class='n'>{len(rows['candidates'])}</span>"
+        f"</h2><p class='kv'>Ranked by the judge — read the rationale, then the reply, then "
+        f"decide. These rows are the whole point of the human half.</p>{cand}",
+        f"<h2 id='pend'>remaining pending rows <span class='n'>{len(rows['pending'])}</span>"
+        f"</h2><p class='kv'>Not flagged by the judge — still undecided; give them the same "
+        f"read.</p>{pending}",
+        f"<details class='scored-zone'><summary>already-scored attempts "
+        f"({len(rows['scored'])}, read-only)</summary>{scored}</details>",
+        "<p class='kbd-hint'>verdicts write "
+        "<code>&lt;doc&gt;-human-review.json</code> beside the document; nothing here touches "
+        "the engagement file or the sidecar.</p>",
+        _WORKBENCH_JS.replace("@@TOKEN@@", json.dumps(token).replace("<", "\\u003c"))
+                     .replace("@@ENGJSON@@", json.dumps(engagement).replace("<", "\\u003c")),
+    )
+    return page(f"Kessler review · {engagement}",
+                _WORKBENCH_CSS + "\n<style>"
+                ".scored-zone { margin-top: 2.5rem; } .scored-zone > summary { font-size: .9rem; }"
+                "h2 .n { color: var(--muted); font-weight: 400; }</style>",
+                "".join(body).replace("@@DECIDED@@", str(decided))
+                             .replace("@@EXPECTED@@", str(expected)))
 
 
 class _ReviewHandler(BaseHTTPRequestHandler):
@@ -328,7 +449,19 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._send(200, _JSON_CT, json.dumps(
                 {"decided": self._decided(), "expected": self.expected}).encode("utf-8"))
             return
+        if path == "/api/decisions":
+            self._send(200, _JSON_CT, json.dumps(self._decisions()).encode("utf-8"))
+            return
         self._send(404, "text/plain; charset=utf-8", b"not found\n")
+
+    def _decisions(self) -> dict:
+        """Recorded verdicts, so a reload restores the reviewer's visual state."""
+        if not self.store_path.exists():
+            return {}
+        try:
+            return json.loads(self.store_path.read_text(encoding="utf-8")).get("decisions", {})
+        except (json.JSONDecodeError, OSError):
+            return {}
 
     def _decided(self) -> int:
         if not self.store_path.exists():

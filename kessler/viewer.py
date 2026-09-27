@@ -22,39 +22,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .asi import ALL_IDS, compute_asr, coverage
-from .html_report import CSS, _esc, _interval, _pct, _sev_badge
+from .asi import compute_asr, coverage
+from .html_report import _esc, _interval, _pct, _sev_badge
 from .report import _SEVERITY_RANK
 from .schema import parse
+from .ui import _asr_chart, masthead, page
 
 _JSON_CT = "application/json; charset=utf-8"
 
-
-def _page(title: str, body: str) -> str:
-    return (
-        "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{_esc(title)}</title><style>{CSS}"
-        "nav { display:flex; gap:.4rem; flex-wrap:wrap; margin:1rem 0; }"
-        "nav a { font-size:.78rem; text-decoration:none; border:1px solid var(--border2);"
-        "  padding:.25rem .7rem; border-radius:999px; color:var(--dim); }"
-        "nav a:hover { color:var(--amber); border-color:var(--amber); }"
-        ".filters { display:flex; gap:.4rem; flex-wrap:wrap; margin:.8rem 0; }"
-        ".filters button { font-family:var(--mono); font-size:.75rem; background:var(--bg2);"
-        "  color:var(--dim); border:1px solid var(--border2); border-radius:999px;"
-        "  padding:.3rem .8rem; cursor:pointer; }"
-        ".filters button.on { color:var(--amber); border-color:var(--amber); }"
-        ".stream { font-size:.78rem; color:var(--dim); max-height:420px; overflow-y:auto;"
-        "  background:var(--bg2); border:1px solid var(--border); border-radius:6px;"
-        "  padding:.6rem .9rem; }"
-        ".stream .hit { color:var(--crit); }"
-        ".finding.will-reveal { opacity:0; transform:translateY(10px); }"
-        ".finding.in { opacity:1; transform:none; transition:opacity .45s ease, transform .45s ease; }"
-        "@media (prefers-reduced-motion: reduce){ .finding.will-reveal{opacity:1;transform:none;} "
-        ".finding.in{transition:none;} }"
-        "</style></head><body><div class='grid-bg'></div><main>"
-        f"<div class='prompt'><b>kessler</b> view · localhost only</div>{body}</main></body></html>"
-    )
+#: Viewer chrome: the same shell as the report (session 18); page-specific layout only.
+_VIEWER_CSS = """
+<style>
+nav.chips { position: sticky; top: 0; background: var(--bg); padding: .6rem 0;
+  z-index: 4; border-bottom: 1px solid var(--border); }
+/* reveal = slide only; opacity must never gate whether the evidence can be read
+   (the old 0->1 fade rendered findings invisible mid-transition — two vision rounds
+   flagged "near-black text" before the cause was found). */
+.finding.will-reveal { transform:translateY(10px); }
+.finding.in { transform:none; transition:transform .45s ease; }
+.hidden { display:none !important; }
+@media (prefers-reduced-motion: reduce){ .finding.will-reveal{transform:none;}
+.finding.in{transition:none;} }
+</style>"""
 
 
 def _viewer_html(eng) -> str:
@@ -64,40 +53,38 @@ def _viewer_html(eng) -> str:
 
     # ---- headline
     body = [
-        f"<h1>{_esc(eng.ref)}</h1>",
-        f"<div class='meta'>{_esc(eng.client)} · {_esc(eng.start)} → {_esc(eng.end)} · "
-        f"{len(eng.attempts)} attempts · {len(eng.findings)} findings · "
-        f"testers {_esc(', '.join(eng.testers))}</div>",
+        masthead(eng.ref,
+                 [f"{_esc(eng.client)} · {_esc(eng.start)} → {_esc(eng.end)} · "
+                  f"{len(eng.attempts)} attempts · {len(eng.findings)} findings · "
+                  f"testers {_esc(', '.join(eng.testers))}"],
+                 "view · localhost only"),
+        '<section class="card" id="headline">',
         "<div class='label'>overall ASR</div>",
         f"<div class='big'>{_pct(overall['asr'])}</div>",
         f"<div class='kv'>95% interval <b>{_interval(overall)}</b></div>",
-        "<nav>",
+        "</section>",
+        "<nav class='chips'>",
     ]
     body.append("<a href='#asr'>rates</a><a href='#findings'>findings</a>"
                 "<a href='#stream'>attempt stream</a><a href='#coverage'>coverage</a>")
     body.append("</nav>")
 
-    # ---- ASR table with per-category anchors
-    body.append("<h2 id='asr'>attack-success rates</h2><table>")
-    body.append("<tr><th>category</th><th>attempts</th><th>ASR</th><th>95% interval</th></tr>")
-    for cid in ALL_IDS:
-        row = asr[cid]
-        if not row["attempts"]:
-            continue
-        body.append(f"<tr><td><a href='?cat={cid}'><code>{cid}</code></a></td>"
-                    f"<td>{row['attempts']}</td><td>{_pct(row['asr'])}</td>"
-                    f"<td>{_interval(row)}</td></tr>")
-    body.append("</table>")
+    # ---- ASR: the chart is the table here (same rows, one grid; the report keeps the
+    # precise table because it adds the worst-finding column). /api/asr serves the raw numbers.
+    body.append("<h2 id='asr'>attack-success rates</h2>")
+    body.append('<div class="kv" style="margin-bottom:.4rem">bar = 95% Wilson interval · '
+                'tick = point estimate · full numbers in the delivered report</div>')
+    body.append(_asr_chart(asr, link="?cat="))
 
     # ---- findings, filterable
     body.append("<h2 id='findings'>findings</h2>")
     if eng.findings:
         cats = sorted({f.category for f in eng.findings})
-        body.append("<div class='filters'>")
+        body.append("<nav class='chips filters'>")
         body.append("<button class='on' data-f='all'>all</button>")
         for c in cats:
-            body.append(f"<button data-f='{c}'>{c}</button>")
-        body.append("</div>")
+            body.append(f"<button data-f='{_esc(c)}'>{_esc(c)}</button>")
+        body.append("</nav>")
         ranked = sorted(eng.findings, key=lambda f: _SEVERITY_RANK[f.severity])
         for f in ranked:
             body.append(
@@ -138,19 +125,22 @@ def _viewer_html(eng) -> str:
     # ---- the attempt stream (the engine at work)
     body.append("<h2 id='stream'>attempt stream</h2><div class='stream'>")
     for a in eng.attempts:
-        mark = "<span class='hit'>HIT</span>" if a.succeeded else "held"
+        mark = ("<span class='hit'>HIT</span>" if a.succeeded
+                else "<span class='held'>held</span>")
         body.append(f"<div>{_esc(a.at)} · {a.category} · {_esc(a.technique)} · "
                     f"{mark} · {_esc(a.environment)}</div>")
     body.append("</div>")
 
     # ---- coverage
     body.append("<h2 id='coverage'>coverage</h2><table>")
+    body.append("<tr><th>category</th><th>status</th><th>reason</th></tr>")
     for r in rows:
-        reason = _esc(r["reason"]) or ("·" if r["status"] == "tested" else "")
+        reason = _esc(r["reason"]) or ("—" if r["status"] == "tested" else "")
         body.append(f"<tr><td><code>{r['category']}</code></td><td>{r['status']}</td>"
                     f"<td>{reason}</td></tr>")
     body.append("</table>")
-    return _page(f"Kessler · {eng.ref}", "".join(body))
+    body.append('<a class="top-link" href="#headline">↑ top</a>')
+    return page(f"Kessler · {eng.ref}", _VIEWER_CSS, "".join(body))
 
 
 class _Handler(BaseHTTPRequestHandler):
