@@ -137,6 +137,10 @@ def comparator_rows(engagement, registry: dict, corpus_hash: str) -> list[dict]:
     shape, {category, unavailable: reason} for honest unavailability.
     """
     usable = [e for e in powered(registry["entries"]) if e["corpus_hash"] == corpus_hash]
+    # Supersession convention (C-9): a corrected unit registers under a NEW monotonic ref
+    # (BASE-X-002 supersedes BASE-X-001) and the old row stays as history. When several
+    # powered units pin the same corpus, the comparator uses the HIGHEST ref — the newest
+    # adjudication — never an arbitrary first row.
     rows: list[dict] = []
     asr = compute_asr(engagement.attempts)
     for cid in ALL_IDS:
@@ -149,7 +153,10 @@ def comparator_rows(engagement, registry: dict, corpus_hash: str) -> list[dict]:
             rows.append({"category": cid, **your,
                          "unavailable": "no powered baseline entry on this corpus version yet"})
             continue
-        e = usable[0]
+        # newest superseding ref FIRST for this category (a -002 unit that carries the cell
+        # outranks the -001 it corrected; a -002 without the cell does not mask -001).
+        # The register is sorted ascending, so scan in reverse.
+        e = next((x for x in reversed(usable) if x["per_category"].get(cid)), usable[0])
         cell = e["per_category"].get(cid)
         if not cell or not cell["attempts"]:
             rows.append({"category": cid, **your,

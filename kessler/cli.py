@@ -1312,12 +1312,23 @@ def cmd_threatindex(args) -> int:
     from collections import defaultdict
     by_month: dict[str, list[dict]] = defaultdict(list)
     for r in rows:
+        # the capture stores the raw request BODY; index the LAST user message (the payload
+        # the trap saw), so family rules and own-run matching both look at real text
+        try:
+            text = json.loads(r.get("request", "{}")).get("messages", [{}])[-1].get("content", "")
+        except (json.JSONDecodeError, IndexError, TypeError):
+            text = str(r.get("request", ""))
         at = str(r.get("at", ""))
         month = at[:7] if len(at) >= 7 and at[4] == "-" else (args.month or "unlabelled")
-        by_month[month].append({"request": r.get("request", ""), "hit": bool(r.get("hit"))})
+        by_month[month].append({"request": text, "hit": bool(r.get("hit"))})
+    own_texts = None
+    if args.own_corpus:
+        # classify our own rehearsal/probe payloads out of the threat cells
+        own_texts = threatindex.own_payload_set()
     from datetime import date
     index = threatindex.build_index(sorted(by_month.items()),
-                                    generated=args.generated or date.today().isoformat())
+                                    generated=args.generated or date.today().isoformat(),
+                                    own=own_texts)
     text = threatindex.render_index_md(index, issue=args.issue)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
@@ -1684,6 +1695,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--issue", type=int, default=1, help="issue number for the title")
     sp.add_argument("--month", default="", help="fallback month label for undated rows")
     sp.add_argument("--generated", default="", help="generation date (default: today)")
+    sp.add_argument("--own-corpus", dest="own_corpus", action="store_true",
+                    help="classify captures matching our own corpus/template traffic as "
+                         "own-run and exclude them from every threat cell (the honest split: "
+                         "an index may not present our own rehearsal as attacker signal)")
     sp.add_argument("--out", help="write the markdown here (default: stdout)")
     sp.set_defaults(fn=cmd_threatindex)
 

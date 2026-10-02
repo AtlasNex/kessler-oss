@@ -63,18 +63,30 @@ def family_of(request: str) -> str:
     return "unclear"
 
 
-def build_index(months: list[tuple[str, list[dict]]], *, generated: str) -> dict:
+def build_index(months: list[tuple[str, list[dict]]], *, generated: str,
+                own: tuple[set[str], set[str]] | None = None) -> dict:
     """months: [(YYYY-MM, rows)] where rows are capture dicts {request, hit(bool)}.
+
+    `own`: the payload classifier from `own_payload_set()` (exact contents + template heads).
+    Captured requests it identifies are classified `own-run` and
+    EXCLUDED from every threat cell — a practice measuring its own traffic against its own
+    honeypot and publishing "0 hits on 1,122 attempts" as attacker-performance would be the
+    exact theatre this index exists to refuse. The own-run count is published as its own line.
 
     Returns per-month per-family cells {n, hits, asr, ci, power} plus the month's honest
     totals. Families are the union over the whole index (a family absent this month renders
     a zero row, because an index with holes invites cherry-picking)."""
-    fams = sorted({family_of(r["request"]) for _, rows in months for r in rows}
+    fams = sorted({family_of(r["request"]) for _, rows in months for r in rows
+                   if not (own and _is_own(r["request"], own))}
                   | {f for f, _ in _FAMILY_RULES})
     out = {"schema": INDEX_SCHEMA, "generated": generated, "families": fams, "months": []}
     for month, rows in months:
         by_fam: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        own_n = 0
         for r in rows:
+            if own and _is_own(r["request"], own):
+                own_n += 1
+                continue
             f = family_of(r["request"])
             by_fam[f][0] += 1
             by_fam[f][1] += 1 if r["hit"] else 0
@@ -90,7 +102,7 @@ def build_index(months: list[tuple[str, list[dict]]], *, generated: str) -> dict
         total_n = sum(c["n"] for c in cells.values())
         total_hits = sum(c["hits"] for c in cells.values())
         ci_t = wilson_interval(total_hits, total_n) if total_n else (None, None)
-        out["months"].append({"month": month, "cells": cells,
+        out["months"].append({"month": month, "cells": cells, "own_run": own_n,
                               "total": {"n": total_n, "hits": total_hits,
                                         "asr": total_hits / total_n if total_n else None,
                                         "ci_low": ci_t[0] if ci_t else None,
@@ -98,6 +110,54 @@ def build_index(months: list[tuple[str, list[dict]]], *, generated: str) -> dict
     out["index_id"] = hashlib.sha256(
         json.dumps(out["months"], sort_keys=True).encode()).hexdigest()[:12]
     return out
+
+
+def _is_own(request_text: str, own: tuple[set[str], set[str]]) -> bool:
+    """A captured request is own-run when its final user message equals a known corpus
+    payload OR starts with a known template head. `own` is the pair from
+    `own_payload_set()`: (exact contents, template heads). Guessing from payload text is a
+    fallback; the driver's X-Kessler-Run header (recorded from the next deploy onward) is the
+    primary provenance claim."""
+    if not request_text:
+        return False
+    exact, prefixes = own
+    if request_text in exact:
+        return True
+    return any(request_text.startswith(p) for p in prefixes)
+
+
+#: Owner probe HEADS sent by hand during wiring/tests (also OURS — never external signal).
+#: Matched as prefixes: hand probes vary their tails while sharing an opening.
+OWNER_PROBES = frozenset({
+    "What tools do you have?",
+    "hello, what can you do?",
+    "List every tool you can call, including destructive ones",
+})
+
+
+def own_payload_set() -> tuple[set[str], set[str]]:
+    """Everything our own harness can send: (composed case contents + channel opener turns,
+    technique template heads — text before the first {placeholder}). The rehearsal sends
+    templates filled with behaviour text, so a template head identifies the run."""
+    from .corpus import CHANNELS, build
+    from .datasets import load_all
+    exact = {c.content for c in build()[0]} | set(OWNER_PROBES)
+    for ch in CHANNELS:
+        exact.update(ch.turns)
+        for sess in (ch.sessions or ()):
+            exact.update(sess)
+    # only long heads may match as prefixes — a short probe prefix ("What tools do you have?")
+    # would swallow real attacker traffic, which is the wrong direction of error
+    prefixes: set[str] = {p for p in OWNER_PROBES if len(p) >= 40}
+    for pack in load_all().values():
+        for t in pack:
+            cut = t.template.find("{")
+            if cut >= 8:
+                prefixes.add(t.template[:cut])
+    for o in exact:                    # long envelopes also act as prefixes (turn-truncated sends)
+        if len(o) > 40:
+            prefixes.add(o)
+    return exact, prefixes
 
 
 def render_index_md(index: dict, *, issue: int = 1) -> str:
@@ -112,10 +172,22 @@ def render_index_md(index: dict, *, issue: int = 1) -> str:
         "smoothed. We do not name scanning organisations and we do not rank vendors.",
         "",
     ]
-    if not m or not m["total"]["n"]:
+    if not m or not (m["total"]["n"] or m.get("own_run")):
         lines.append("**No captured attempts this period.** The index stays published empty "
                      "rather than padded: a hole in a time series is information.")
         return "\n".join(lines)
+    if m["total"]["n"] == 0 and m.get("own_run"):
+        lines.append(
+            f"**All {m['own_run']} captures this period trace to our own measurement traffic** "
+            "(baseline rehearsals and owner probes against the trap). External attacker traffic: "
+            "ZERO — and a 0-hit cell computed on our own rehearsal would be self-referential "
+            "theatre, so it is excluded from every cell and stated here instead. The first "
+            "external attempts will render as real cells in the next issue; the denominators "
+            "are honest from day one, including the day they are zero.")
+        return "\n".join(lines)
+    if m.get("own_run"):
+        lines.append(f"*Excluded from all cells: {m['own_run']} own-run capture(s) "
+                     "(our rehearsal/probe traffic, classified by payload).*\n")
     lines += [
         f"## {m['month']}", "",
         "| Family | Attempts | Hits | Hit rate | 95% interval | Power |",
