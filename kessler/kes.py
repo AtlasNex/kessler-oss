@@ -56,6 +56,52 @@ REMEDIATION_PARTS: tuple[str, ...] = (
 )
 
 
+#: CRA classification (PLAN-v5 #16, 19e §1/§5.4): an agent framework / MCP server / agent-built
+#: product sold into the EU is a product with digital elements; a demonstrated active
+#: exploitability starts the client's 24h/72h clocks. The field lets the triage decision be made
+#: from the finding itself: which class applies, and the one line why the class is what it is.
+CRA_CLASSES = ("aev-reportable",        # actively exploited vulnerability: reliable evidence of
+                                            # exploitation exists (a demonstrated hit IS that evidence)
+               "severe-incident",       # exploitation happened and caused a severe incident
+               "bau-finding")           # business-as-usual: no exploitation evidence found
+CRA_RE = re.compile(r"^(" + "|".join(CRA_CLASSES) + r")$")
+
+#: ATLAS mapping state (PLAN-v5 #16, honesty register). Either a real AML technique ID, a
+#: proposed-gap ID tagged as PROPOSED (CSA AML.T0090-T0095 are not adopted yet; the tag is
+#: load-bearing), or the explicit statement that ATLAS's current taxonomy has no home here.
+#: ("outside-atlas" is the only sentence the practice will ever write about those six gap
+#: categories — never a forced mapping onto a tactic that does not exist.)
+ATLAS_RE = re.compile(r"^(AML\.T\d{4}(?:\.\d{4})?(?: \(proposed\))?|outside-atlas-current-taxonomy)$")
+
+#: Technique IDs that DO NOT EXIST in ATLAS as of content release v2026.07 (the CSA gap-analysis
+#: proposals). A bare mapping to one claims a home that is not there; it is only valid tagged
+#: '(proposed)'. Bump this constant (and DECISIONS) when/if MITRE adopts an ID.
+ATLAS_PROPOSED_IDS = frozenset(f"AML.T{n:04d}" for n in range(90, 96))
+
+
+def validate_cra_class(value: str) -> None:
+    if value and not CRA_RE.match(value):
+        raise ValueError(
+            f"cra_class {value!r} is not one of {', '.join(CRA_CLASSES)} (empty = not assessed; "
+            "the field is the client's 24h/72h clock decision, never a free-text guess)")
+
+
+def validate_atlas_mapping(value: str) -> None:
+    if value and not ATLAS_RE.match(value):
+        raise ValueError(
+            f"atlas_mapping {value!r} is not a valid ATLAS statement: use a real AML.T#### ID, a "
+            "CSA proposed ID tagged ' (proposed)' (AML.T0090-T0095 are NOT adopted), or the exact "
+            "sentence 'outside-atlas-current-taxonomy' — a forced mapping onto a nonexistent "
+            "tactic is the error this rail prevents")
+    base = value.replace(" (proposed)", "") if value else ""
+    if base in ATLAS_PROPOSED_IDS and not value.endswith(" (proposed)"):
+        raise ValueError(
+            f"atlas_mapping {value!r}: AML.T0090-T0095 are CSA PROPOSALS (gap analysis, 27 Mar "
+            "2026) — not adopted by MITRE as of v2026.07. Tag them '(proposed)' or map to an ID "
+            "that exists; an untagged proposed ID reads as an existing mapping and is the "
+            "exact drift this rail exists to stop")
+
+
 def validate_cvss_v4(vector: str) -> str:
     """Structural validation of a CVSS v4.0 vector string. Returns it normalised.
 

@@ -60,16 +60,26 @@ SOURCES: tuple[tuple[str, str], ...] = (
 )
 
 #: MITRE ATLAS facts, from the repo's verified research (docs/research/03 §10;
-#: docs/research/17 §1.7), pinned as constants so wording cannot drift from what was verified.
-ATLAS_FORMAT_VERSION = "data format v6 (v6.0.0, introduced with content release v2026.05)"
+#: docs/research/17 §1.7; docs/research/19e §3.2), pinned as constants so wording cannot drift
+#: from what was verified. Content re-pinned to v2026.07 per PLAN-v5 #16 (atlas-data commit
+#: 2306eca: 16 tactics, 101 techniques, 77 sub-techniques, 68 case studies; adds AI Agent Tool
+#: Poisoning techniques and the "AI Red Team" mitigation entry; monthly release cadence since
+#: Secure AI v2, 6 May 2026). Data format remains v6.0.0 (introduced with v2026.05).
+ATLAS_FORMAT_VERSION = ("data format v6 (v6.0.0), content release v2026.07 (monthly cadence; "
+                        "16 tactics / 101 techniques / 77 sub-techniques)")
 ATLAS_PLATFORM_TAG = "Agentic AI"
+ATLAS_RED_TEAM_MITIGATION = (
+    'ATLAS content release v2026.07 added a mitigation entry, "AI Red Team" — the taxonomy\'s own '
+    "home for adversarial-robustness testing of AI systems."
+)
 ATLAS_GAP_NOTE = (
     "MITRE ATLAS has no Lateral Movement and no Command-and-Control tactics, and CSA's 2026 gap "
     "analysis finds six agentic technique categories with no adequate ATLAS home (agent-to-agent "
     "lateral movement, tool-chain poisoning, orchestrator hijacking, credential relay through "
     "delegation chains, cross-session memory persistence, MCP server compromise as a pivot). "
     "Findings in categories with no ATLAS home are stated as **outside ATLAS's current taxonomy** "
-    "rather than mapped onto tactics that do not exist."
+    "rather than mapped onto tactics that do not exist. The CSA proposals AML.T0090-T0095 remain "
+    "**proposed** (untagged citation of them is a mapping error)."
 )
 
 #: Standards block for the report's section 3, re-pinned per Phase 3.1: ATLAS format v6 + the
@@ -84,8 +94,9 @@ STANDARDS_BLOCK_V2 = (
     "superseded on 3 August 2026).\n"
     "- OWASP MCP Top 10 — cited as **beta**; MCP attack classes carry SAFE-MCP SAFE-T references "
     "(e.g. SAFE-T1001 tool poisoning, SAFE-T1201 rug pull) where a published ID exists.\n"
-    "- MITRE ATLAS, data format v6 (format v6.0.0, introduced with content release v2026.05), with "
-    "findings tagged to the **Agentic AI** platform where a mapping exists; categories with no ATLAS "
+    "- MITRE ATLAS, data format v6 with content release v2026.07 (16 tactics / 101 techniques / "
+    "77 sub-techniques; monthly cadence), with findings tagged to the **Agentic AI** platform "
+    "where a mapping exists; categories with no ATLAS "
     "home are stated as outside ATLAS's current taxonomy.\n"
     "- CISA/NSA *Careful Adoption of Agentic AI Services* (2026).\n"
     "- NIST AI Risk Management Framework and its Generative AI Profile.\n\n"

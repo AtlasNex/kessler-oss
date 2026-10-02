@@ -1146,6 +1146,231 @@ def cmd_baseline(args) -> int:
     return 0
 
 
+def cmd_bench(args) -> int:
+    """PLAN-v5 #22: Open Bench v0 register (the legally-clean public baseline)."""
+    from . import bench
+
+    reg_path = Path(args.register)
+    if args.list:
+        if not reg_path.exists():
+            print(f"REFUSED: no register at {reg_path}", file=sys.stderr)
+            return 2
+        print(bench.render_bench_md(bench.load_register(reg_path)))
+        return 0
+    if not args.ref or not args.document:
+        print("REFUSED: bench add needs <document> and --ref", file=sys.stderr)
+        return 2
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    try:
+        auth = json.loads(args.authorization)
+    except json.JSONDecodeError as exc:
+        print(f"REFUSED: --authorization must be JSON: {exc}", file=sys.stderr)
+        return 2
+    from .capsule import canonical_corpus_hash
+    from datetime import date
+    try:
+        unit = bench.register_unit(ref=args.ref, target_kind=args.target_kind,
+                                   authorization=auth, engagement=eng,
+                                   corpus_hash=args.corpus_hash or canonical_corpus_hash(),
+                                   measured=args.measured or date.today().isoformat())
+    except ValueError as exc:
+        print(f"REFUSED (bench scope law): {exc}", file=sys.stderr)
+        return 2
+    if reg_path.exists():
+        reg = bench.load_register(reg_path)
+        if any(u["ref"] == unit["ref"] for u in reg["units"]):
+            print(f"REFUSED: bench unit {unit['ref']!r} already registered "
+                  "(supersede under a new ref, C-9)", file=sys.stderr)
+            return 2
+    else:
+        reg = {"schema": bench.BENCH_SCHEMA, "preregistration": bench.PREREGISTRATION,
+               "units": []}
+    reg["units"].append(unit)
+    reg["units"].sort(key=lambda u: u["ref"])
+    bench.save_register(reg, reg_path)
+    print(f"REGISTERED {unit['ref']} ({unit['target_kind']}) in {reg_path}: "
+          f"n={unit['n']} successes={unit['successes']}")
+    print(bench.render_bench_md(reg))
+    return 0
+
+
+def cmd_aiuc(args) -> int:
+    """PLAN-v5 #24: the AIUC-1 quarterly evidence pack (mapped, never certified)."""
+    from .aiuc import build_pack, render_pack_md
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    from .capsule import canonical_corpus_hash
+    try:
+        pack = build_pack(eng, quarter=args.quarter,
+                          corpus_hash=args.corpus_hash or canonical_corpus_hash(),
+                          method_version=args.method_version,
+                          previous_ref=args.previous, retest_status=args.retest_status)
+    except ValueError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    text = render_pack_md(pack)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_sds(args) -> int:
+    """PLAN-v5 #23: the Susceptibility Data Sheet (machine JSON + human render)."""
+    from .sds import render_sds_md, sds_from_engagement
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    from .capsule import canonical_corpus_hash
+    sheet = sds_from_engagement(eng, corpus_hash=args.corpus_hash or canonical_corpus_hash(),
+                                method_version=args.method_version)
+    text = render_sds_md(sheet)
+    outdir = Path(args.out) if args.out else None
+    if outdir:
+        outdir.mkdir(parents=True, exist_ok=True)
+        (outdir / "sds.md").write_text(text, encoding="utf-8")
+        (outdir / "sds.json").write_text(json.dumps(sheet, indent=1, ensure_ascii=False) + "\n",
+                                         encoding="utf-8")
+        print(f"WROTE  {outdir}/sds.md + sds.json")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_drill(args) -> int:
+    """PLAN-v5 #14: the cascade drill — plan the chains, score the composed runs."""
+    from . import drill
+
+    if args.engagement:
+        try:
+            eng = parse(json.loads(Path(args.engagement).read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError, SchemaError) as exc:
+            print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+            return 2
+        targets, findings = eng.targets, eng.findings
+    else:
+        try:
+            targets = json.loads(Path(args.targets).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"REFUSED: cannot load --targets: {exc}", file=sys.stderr)
+            return 2
+        findings = []
+    plan = drill.plan_drill(targets, findings, max_chains=args.max_chains)
+    score = None
+    if args.runs:
+        try:
+            runs = json.loads(Path(args.runs).read_text(encoding="utf-8"))
+            score = drill.score_drill(runs)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            print(f"REFUSED: cannot score the runs file: {exc}", file=sys.stderr)
+            return 2
+    text = drill.render_drill_md(plan, score, topology_name=args.name)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_threatindex(args) -> int:
+    """PLAN-v5 #13: build/render the Agentic Threat Index from honeypot capture exports."""
+    from . import threatindex
+
+    rows: list[dict] = []
+    for path in args.export:
+        try:
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            print(f"REFUSED: cannot read the export: {exc}", file=sys.stderr)
+            return 2
+        for ln in lines:
+            if not ln.strip():
+                continue
+            try:
+                rows.append(json.loads(ln))
+            except json.JSONDecodeError:
+                print(f"REFUSED: malformed jsonl line in {path}: {ln[:80]}", file=sys.stderr)
+                return 2
+    if not rows:
+        print("REFUSED: the exports carry no rows (an empty index needs at least one month "
+              "label; pass --month if the captures are all undated)", file=sys.stderr)
+        return 2
+    from collections import defaultdict
+    by_month: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        at = str(r.get("at", ""))
+        month = at[:7] if len(at) >= 7 and at[4] == "-" else (args.month or "unlabelled")
+        by_month[month].append({"request": r.get("request", ""), "hit": bool(r.get("hit"))})
+    from datetime import date
+    index = threatindex.build_index(sorted(by_month.items()),
+                                    generated=args.generated or date.today().isoformat())
+    text = threatindex.render_index_md(index, issue=args.issue)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_standing(args) -> int:
+    """PLAN-v5 #12: the Standing Attestation digest + the client CI bundle around it."""
+    from . import attestation
+    from .gate import evaluate_baseline, load_baseline
+
+    try:
+        baseline = load_baseline(args.baseline)
+    except (OSError, json.JSONDecodeError, gate_mod.GateError) as exc:
+        print(f"REFUSED: cannot load the baseline: {exc}", file=sys.stderr)
+        return 2
+    runs, outcomes = [], []
+    for path in args.runs:
+        try:
+            eng = parse(json.loads(Path(path).read_text(encoding="utf-8")))
+        except (OSError, json.JSONDecodeError, SchemaError) as exc:
+            print(f"REFUSED: cannot load {path}: {exc}", file=sys.stderr)
+            return 2
+        report = evaluate_baseline(baseline, eng)
+        runs.append(eng)
+        outcomes.append({"document_ref": eng.ref, "exit_code": {
+            "PASS": 0, "REGRESSION": 1, "REFUSED": 2}[report["status"]]})
+    from .capsule import canonical_corpus_hash
+    digest = attestation.build_digest(
+        client=args.client or (runs[0].client if runs else ""),
+        estate=args.estate, period=args.period, baseline=baseline, runs=runs,
+        gate_outcomes=outcomes, corpus_hash=args.corpus_hash or canonical_corpus_hash(),
+        method_version=args.method_version)
+    if args.sign_kessler:
+        attestation.countersign(digest, kessler_sig=args.sign_kessler)
+    if args.sign_client:
+        attestation.countersign(digest, client_sig=args.sign_client)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "digest.json").write_text(
+        json.dumps(digest, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    (out / "digest.md").write_text(attestation.render_digest_md(digest), encoding="utf-8")
+    (out / "baseline.json").write_text(Path(args.baseline).read_text(encoding="utf-8"),
+                                       encoding="utf-8")
+    (out / "CI-SETUP.md").write_text(attestation.CLIENT_CI_README, encoding="utf-8")
+    print(f"WROTE  {out}/digest.md + digest.json + baseline.json + CI-SETUP.md")
+    print(attestation.render_digest_md(digest))
+    return 1 if digest["regressions"] else 0
+
+
 # --------------------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1357,6 +1582,61 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--top", type=int, default=12, help="rows to render (default 12)")
     sp.set_defaults(fn=cmd_cascade)
 
+    sp = sub.add_parser("bench", help="Open Bench v0 register (PLAN-v5 #22): the legally-clean "
+                                      "public baseline — own lab, our honeypots, self-hosted "
+                                      "OSS builds, written-authorized consented targets only")
+    sp.add_argument("document", nargs="?", help="engagement JSON (the run to register)")
+    sp.add_argument("--register", default="bench-register.json",
+                    help="register JSON path (default ./bench-register.json)")
+    sp.add_argument("--ref", default="", help="unit reference (e.g. BENCH-G2A-001)")
+    sp.add_argument("--target-kind", dest="target_kind", default="",
+                    choices=("own-lab", "g2-honeypot", "oss-selfhosted", "opt-in-consented"),
+                    help="bench-scope kind; third-party hosted targets are not registrable")
+    sp.add_argument("--authorization", default='',
+                    help='authorization JSON: {"kind":"ownership"} or '
+                         '{"kind":"written-authorization","file":"...","signed":"..."}')
+    sp.add_argument("--corpus-hash", dest="corpus_hash", default="",
+                    help="corpus pin (default: recompute)")
+    sp.add_argument("--measured", default="", help="measurement date (default: today)")
+    sp.add_argument("--list", action="store_true", help="render the register, add nothing")
+    sp.set_defaults(fn=cmd_bench)
+
+    sp = sub.add_parser("aiuc", help="AIUC-1 quarterly evidence pack (PLAN-v5 #24): findings "
+                                     "MAPPED to the six pillars' control territory; the render "
+                                     "refuses certification language by the bundle's own lint")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--quarter", required=True, help="evidence quarter, e.g. 2026-Q4")
+    sp.add_argument("--method-version", dest="method_version", default="v0.0")
+    sp.add_argument("--corpus-hash", dest="corpus_hash", default="")
+    sp.add_argument("--previous", default="", help="ref of the previous quarter's run")
+    sp.add_argument("--retest-status", dest="retest_status", default="",
+                    help="one-line remediation/retest status for the pack")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.set_defaults(fn=cmd_aiuc)
+
+    sp = sub.add_parser("sds", help="Susceptibility Data Sheet v0.1 (PLAN-v5 #23): the "
+                                    "machine-readable risk-transfer annex + human render; "
+                                    "susceptibility input for a loss model, not a loss model")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--method-version", dest="method_version", default="v0.0")
+    sp.add_argument("--corpus-hash", dest="corpus_hash", default="")
+    sp.add_argument("--out", help="write sds.md + sds.json into this directory (stdout if omitted)")
+    sp.set_defaults(fn=cmd_sds)
+
+    sp = sub.add_parser("drill", help="agentic cascade drill (PLAN-v5 #14): plan the top chains "
+                                      "over the reach graph, score composed multi-hop runs "
+                                      "(one attempt per chain; reached-only denominators). "
+                                      "Owned topology or written-authorized scope only.")
+    sp.add_argument("--engagement", help="engagement JSON (targets + findings source)")
+    sp.add_argument("--targets", help="bare targets JSON (plan-only mode, no findings)")
+    sp.add_argument("--runs", help="composed drill runs JSON to score "
+                                  '[{"chain","planned_hops","hops":[{node,succeeded,observed}]}]')
+    sp.add_argument("--max-chains", dest="max_chains", type=int, default=5,
+                    help="chains in the attempt plan (default 5)")
+    sp.add_argument("--name", default="", help="topology name printed on the artifact")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.set_defaults(fn=cmd_drill)
+
     sp = sub.add_parser("memory-score", help="score an engagement's memory-pack attempts into "
                                              "L1 write-retrieval / L2 cross-session / L3 "
                                              "trigger-gated levels (PLAN-v5 #17)")
@@ -1394,6 +1674,36 @@ def build_parser() -> argparse.ArgumentParser:
                     help="corpus pin (default: recompute the current corpus hash)")
     sp.add_argument("--list", action="store_true", help="render the register, add nothing")
     sp.set_defaults(fn=cmd_baseline)
+
+    sp = sub.add_parser("threat-index", help="Agentic Threat Index (PLAN-v5 #13): monthly "
+                        "intervalled attempt/hit counts by attack family from the g2 honeypot "
+                        "capture exports (own-endpoint counts; payloads stay licence-gated). "
+                        "Cells below the preregistered N print directional-only.")
+    sp.add_argument("export", nargs="+", help="capture-export.jsonl file(s) from "
+                                              "g2-honeypot/export-capture.py")
+    sp.add_argument("--issue", type=int, default=1, help="issue number for the title")
+    sp.add_argument("--month", default="", help="fallback month label for undated rows")
+    sp.add_argument("--generated", default="", help="generation date (default: today)")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.set_defaults(fn=cmd_threatindex)
+
+    sp = sub.add_parser("standing", help="Standing Attestation digest (PLAN-v5 #12): the client "
+                        "runs the pinned baseline in THEIR CI; this assembles the quarterly "
+                        "digest + CI bundle from the run docs and the gate baseline. Exit 1 if "
+                        "any run this period regressed.")
+    sp.add_argument("--baseline", required=True, help="gate baseline JSON (kessler gate --init)")
+    sp.add_argument("--runs", nargs="+", required=True, help="engagement JSONs this period")
+    sp.add_argument("--client", default="", help="client name (default: the run's)")
+    sp.add_argument("--estate", required=True, help="estate label on the digest")
+    sp.add_argument("--period", required=True, help="e.g. 2026-Q4")
+    sp.add_argument("--method-version", dest="method_version", default="v0.0")
+    sp.add_argument("--corpus-hash", dest="corpus_hash", default="")
+    sp.add_argument("--sign-kessler", dest="sign_kessler", default="",
+                    help="countersign line, e.g. 'AtlasNex 2026-10-02' (append-only)")
+    sp.add_argument("--sign-client", dest="sign_client", default="",
+                    help="client countersign line (append-only)")
+    sp.add_argument("--out", required=True, help="bundle directory to write")
+    sp.set_defaults(fn=cmd_standing)
     return p
 
 

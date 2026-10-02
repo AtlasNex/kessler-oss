@@ -54,6 +54,10 @@ FINDING_FIELDS: tuple[str, ...] = (
     "remediation_code_patch", "threat_scenario", "impact_analysis", "finding_id",
     "cvss_v4_vector", "chained_with",
 )
+#: PLAN-v5 #16 additions (CRA clock class + ATLAS mapping state). Optional on load — sealed
+#: v1 documents predate them and stay valid; dumped ONLY when set, so a document without the
+#: fields round-trips byte-identically and adding a field never rewrites history.
+OPTIONAL_FINDING_FIELDS: tuple[str, ...] = ("cra_class", "atlas_mapping")
 ENGAGEMENT_FIELDS: tuple[str, ...] = ("ref", "client", "window", "scope_sha256", "testers")
 RETEST_FIELDS: tuple[str, ...] = ("baseline_sha256", "attempts")
 
@@ -171,7 +175,8 @@ def _finding(raw, path: str) -> Finding:
     not acceptable; both gates must pass.
     """
     _obj(raw, path)
-    _keys(raw, path, FINDING_FIELDS)
+    _keys(raw, path, FINDING_FIELDS,
+           optional=OPTIONAL_FINDING_FIELDS)   # v5 #16 fields: optional on load
     severity = raw["severity"]
     if isinstance(severity, str):
         try:
@@ -206,6 +211,8 @@ def _finding(raw, path: str) -> Finding:
             finding_id=raw["finding_id"],
             cvss_v4_vector=cvss,
             chained_with=chained,
+            cra_class=raw.get("cra_class", ""),
+            atlas_mapping=raw.get("atlas_mapping", ""),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise SchemaError(f"{path}: {exc}") from exc
@@ -366,6 +373,12 @@ def _finding_doc(f: Finding) -> dict:
     out["impact_analysis"] = dict(f.impact_analysis)
     out["severity"] = f.severity.value
     out["chained_with"] = list(f.chained_with)
+    # v5 #16: the optional fields ride only when set, so a document written before them
+    # round-trips byte-identically (the identity contract in the module docstring).
+    if f.cra_class:
+        out["cra_class"] = f.cra_class
+    if f.atlas_mapping:
+        out["atlas_mapping"] = f.atlas_mapping
     return out
 
 

@@ -18,7 +18,7 @@ report is hand-written; every figure traces to attempt records.
 
 | | |
 | --- | --- |
-| `kessler/` | the core: ASI taxonomy + ASR kernel (Wilson intervals), evidence-gated attempts/findings (KES contract), live HTTP driver with deterministic parallel lanes, multi-turn conduction, report/SARIF/AIBOM renderers, **compliance evidence bundles** (EU AI Act Art 55 / ISO 42001 / NIST AI RMF) with an anti-certification lint rule, **`kessler gate`** — a CI regression gate over committed baselines, **the Verifiable Evidence Capsule** (`capsule` builds it, `verify-capsule` recomputes it), baseline register + comparator, proof kit (board summary, heatmap, retest certificate, underwriter pack), memory L1/L2/L3 scorer, containment profile, MCP drift radar, cascade chain-search, estate rollup + run cost/power meter, blast-radius engine, localhost viewer, adapter importers (garak, PyRIT, DeepTeam, mcp-scanner, AI Infra Guard), MCP tool-chain auditor |
+| `kessler/` | the core: ASI taxonomy + ASR kernel (Wilson intervals), evidence-gated attempts/findings (KES contract), live HTTP driver with deterministic parallel lanes, multi-turn conduction, report/SARIF/AIBOM renderers, **compliance evidence bundles** (EU AI Act Art 55 / ISO 42001 / NIST AI RMF) with an anti-certification lint rule, **`kessler gate`** — a CI regression gate over committed baselines, blast-radius engine, localhost viewer, adapter importers (garak, PyRIT, DeepTeam, mcp-scanner, AI Infra Guard), MCP tool-chain auditor |
 | `datasets/` | 25 ASI techniques + 126 attacker behaviours (first-party frames + InjecAgent and AgentDojo objectives verbatim, all MIT) composed into **3,758 test cases** across 7 channels; `python -m kessler.cli corpus` prints the census, so count them yourself; licence gate refuses unprovenanced packs |
 | `examples/ci-sample/` | green→red proof for the CI gate (and what this repo's CI runs) |
 
@@ -47,19 +47,6 @@ gate's green→red proof on every push — zero-install, bare interpreter.
 Exit 0 = no significant regression (Wilson intervals must separate before a verdict), 1 = the
 ASR rose significantly or a category lost coverage, 2 = the comparison itself is broken and
 refuses to score. This repository's own CI proves both directions on every push.
-
-## Verify a number someone handed you
-
-```bash
-python -m kessler.cli verify-capsule capsule.json   # exit 0 valid / 1 tampered / 2 unusable
-```
-
-A Verifiable Evidence Capsule is a hash-chained record of one engagement: the scope facts, every
-attempt with its verbatim evidence, and the computed ASR block — each record chained to the last
-by SHA-256. `verify-capsule` rebuilds every attempt through the kernel's own constructors and
-recomputes every rate from the chain. It proves arithmetic and tamper-evidence; it is not a
-security verdict and not a certification. If any byte of the evidence was edited, the check says
-so loudly. Build one for your own runs with `kessler capsule <document.json> --method "..."`.
 
 ## What this is NOT
 

@@ -359,11 +359,18 @@ class Finding:
     finding_id: str = ""
     cvss_v4_vector: str = ""
     chained_with: list[str] = field(default_factory=list)
+    #: PLAN-v5 #16 (19e): the client's CRA clock decision, carried by the finding itself.
+    cra_class: str = ""
+    #: PLAN-v5 #16: real AML ID, CSA proposed ID tagged '(proposed)', or the explicit
+    #: outside-atlas-current-taxonomy statement. Empty = not yet mapped (rendered as such).
+    atlas_mapping: str = ""
 
     def __post_init__(self):
         # The KES contract (D-025) is enforced at construction, not just on load: a Finding made
         # in-process must satisfy the same rules a file must.
-        from .kes import CIA_LEVELS, KES_ID_RE, validate_impact_analysis, validate_cvss_v4
+        from .kes import (CIA_LEVELS, KES_ID_RE, validate_atlas_mapping,
+                          validate_cra_class, validate_cvss_v4,
+                          validate_impact_analysis)
 
         if not KES_ID_RE.match(self.finding_id or ""):
             raise ValueError(
@@ -378,6 +385,8 @@ class Finding:
         validate_impact_analysis(self.impact_analysis)
         if self.cvss_v4_vector:
             validate_cvss_v4(self.cvss_v4_vector)
+        validate_cra_class(self.cra_class)
+        validate_atlas_mapping(self.atlas_mapping)
         for name in (
             "remediation_architectural_fix", "remediation_guardrail_config",
             "remediation_code_patch",
@@ -406,10 +415,16 @@ class Finding:
             f"\n**Impact analysis** — Confidentiality: {ia.get('confidentiality', 'NONE')} · "
             f"Integrity: {ia.get('integrity', 'NONE')} · Availability: {ia.get('availability', 'NONE')}"
         )
+        cra = (f"\n**CRA classification:** {self.cra_class}" if self.cra_class
+               else "\n**CRA classification:** not assessed (a client clock decision; "
+                    "record it when exploitation evidence is judged)")
+        atlas = (f"\n**MITRE ATLAS:** `{self.atlas_mapping}`" if self.atlas_mapping
+                 else "\n**MITRE ATLAS:** not mapped — see the standards note on the taxonomy's "
+                      "current agentic gaps")
         return (
             f"### {self.finding_id} — {self.category}: {self.title}\n\n"
             f"**Risk category:** {c.name} ({self.category})\n"
-            f"**Severity:** {self.severity.value.upper()}{chain}{cvss}{ia_text}\n\n"
+            f"**Severity:** {self.severity.value.upper()}{chain}{cvss}{cra}{atlas}{ia_text}\n\n"
             f"**Description**\n\n{self.description}\n\n"
             f"**Preconditions**\n\n{self.preconditions}\n\n"
             f"**Threat scenario**\n\n{self.threat_scenario}\n\n"
@@ -430,7 +445,9 @@ def build_finding(*, category: str, title: str, severity: Severity, description:
                   remediation_architectural_fix: str, remediation_guardrail_config: str,
                   remediation_code_patch: str, finding_id: str,
                   chained_with: list[str] | None = None,
-                  cvss_v4_vector: str = "") -> Finding:
+                  cvss_v4_vector: str = "",
+                  cra_class: str = "",
+                  atlas_mapping: str = "") -> Finding:
     """Build a Finding, refusing anything that could not survive client review.
 
     Every field is load-bearing in the report spec, and a finding without raw evidence is exactly
@@ -478,4 +495,6 @@ def build_finding(*, category: str, title: str, severity: Severity, description:
         finding_id=finding_id,
         cvss_v4_vector=cvss_v4_vector,
         chained_with=list(chained_with or []),
+        cra_class=cra_class,
+        atlas_mapping=atlas_mapping,
     )

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "kessler/engagement/v1",
   "title": "Kessler engagement",
-  "description": "The single source of truth for one engagement. Every deliverable (report, attestation letter, SARIF, AIBOM, coverage table, retest delta) is a pure function of this document. This JSON Schema is the versioned INTEROP CONTRACT for other tools; the authoritative validator is kessler/schema.py, which additionally re-asserts C-1 (an unevidenced success cannot be loaded) — a shape-valid document is not necessarily an acceptable one.",
+  "description": "The single source of truth for one engagement. Every deliverable (report, attestation letter, SARIF, AIBOM, coverage table, retest delta) is a pure function of this document. This JSON Schema is the versioned INTEROP CONTRACT for other tools; the authoritative validator is kessler/schema.py, which additionally re-asserts C-1 (an unevidenced success cannot be loaded) \u2014 a shape-valid document is not necessarily an acceptable one.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -111,7 +111,7 @@
               "type": "string",
               "minLength": 1
             },
-            "description": "What the target can reach, as prefix:name — e.g. cred:db, api:email. This is the blast radius the offer is about."
+            "description": "What the target can reach, as prefix:name \u2014 e.g. cred:db, api:email. This is the blast radius the offer is about."
           },
           "notes": {
             "type": "string"
@@ -156,7 +156,7 @@
           },
           "succeeded": {
             "type": "boolean",
-            "description": "Did the ATTACK succeed — not the scanner's own label. Scanners disagree (garak passed=true means the attack FAILED). Conversion happens once, in kessler/polarity.py."
+            "description": "Did the ATTACK succeed \u2014 not the scanner's own label. Scanners disagree (garak passed=true means the attack FAILED). Conversion happens once, in kessler/polarity.py."
           },
           "observed": {
             "type": "string",
@@ -341,7 +341,21 @@
           "cvss_v4_vector": {
             "type": "string",
             "pattern": "^$|^CVSS:4\\.0(/[A-Z]{1,2}:[A-Za-z0-9.]+)+$",
-            "description": "OPTIONAL CVSS v4.0 vector — deterministic components only; supplements the ASR interval and never replaces it (D-005, D-025). Structural validation in kessler/kes.py."
+            "description": "OPTIONAL CVSS v4.0 vector \u2014 deterministic components only; supplements the ASR interval and never replaces it (D-005, D-025). Structural validation in kessler/kes.py."
+          },
+          "cra_class": {
+            "type": "string",
+            "enum": [
+              "",
+              "aev-reportable",
+              "severe-incident",
+              "bau-finding"
+            ],
+            "description": "CRA clock class for the client (PLAN-v5 #16). '' = not assessed."
+          },
+          "atlas_mapping": {
+            "type": "string",
+            "description": "AML.T#### (add ' (proposed)' for CSA proposals T0090-T0095) or the exact sentence outside-atlas-current-taxonomy (PLAN-v5 #16)."
           }
         }
       }
