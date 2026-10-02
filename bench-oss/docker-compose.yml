@@ -1,0 +1,48 @@
+# bench-oss — self-hosted OSS agent builds for the Open Bench register (PLAN-v5 #22).
+# Independently-owned instances, loopback-only; the lab model endpoint is injected at deploy
+# time by deploy.sh from the honeypot env (no value is ever committed or printed).
+name: bench-oss
+
+services:
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: bench-openwebui
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8101:8080"
+    environment:
+      WEBUI_AUTH: "False"
+      ENABLE_OLLAMA_API: "False"
+      ENABLE_OPENAI_API: "True"
+      OPENAI_API_BASE_URL: ${LAB_BASE_URL}
+      OPENAI_API_KEY: ${LAB_API_KEY}
+      DEFAULT_MODELS: ${LAB_MODEL}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY}
+    volumes:
+      - openwebui-data:/app/backend/data
+
+  anythingllm:
+    image: mintplexlabs/anythingllm
+    container_name: bench-anythingllm
+    restart: unless-stopped
+    # SYS_ADMIN per the upstream deployment docs (embedded collectors). Noted in README.
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "127.0.0.1:8102:3001"
+    environment:
+      STORAGE_DIR: /app/server/storage
+      LLM_PROVIDER: generic-openai
+      GENERIC_OPEN_AI_MODEL_PREF: ${LAB_MODEL}
+      GENERIC_OPEN_AI_BASE_PATH: ${LAB_BASE_URL}
+      GENERIC_OPEN_AI_API_KEY: ${LAB_API_KEY}
+      DISABLE_TELEMETRY: "true"
+      SERVER_PORT: "3001"
+    volumes:
+      - anythingllm-data:/app/server/storage
+      - anythingllm-hot:/app/server/storage/hotdir
+
+volumes:
+  openwebui-data:
+  anythingllm-data:
+  anythingllm-hot:

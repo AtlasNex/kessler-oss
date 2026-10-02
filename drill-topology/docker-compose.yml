@@ -1,0 +1,32 @@
+# drill-topology — the OWNED 4-node estate for Drill #01 (PLAN-v5 #14).
+# Orchestrator (:8111) + shared team-notes store (:8112); the two g2 honeypots live in
+# their own compose project. Loopback-only; the model endpoint is injected at deploy time.
+name: drill-topology
+
+services:
+  orchestrator:
+    build: .
+    container_name: drill-orchestrator
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8111:8095"
+    environment:
+      DRILL_NAME: drill-orchestrator
+      DRILL_MODEL_URL: ${LAB_BASE_URL}/chat/completions
+      DRILL_MODEL_KEY: ${LAB_API_KEY}
+      DRILL_MODEL_NAME: ${LAB_MODEL}
+
+  store:
+    build: .
+    container_name: drill-store
+    restart: unless-stopped
+    command: ["python", "store.py"]
+    ports:
+      - "127.0.0.1:8112:8095"
+    environment:
+      DRILL_DB: /data/notes.db
+    volumes:
+      - drill-store-data:/data
+
+volumes:
+  drill-store-data:

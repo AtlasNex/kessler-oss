@@ -1,0 +1,16 @@
+{
+  "ref": "BENCH-OSS-02",
+  "client": "AtlasNex (Open Bench - self-hosted OSS build: AnythingLLM; own instance, loopback only)",
+  "window": { "start": "2026-10-02", "end": "2026-10-02" },
+  "targets": [
+    {
+      "id": "bench-anythingllm",
+      "kind": "agent",
+      "version": "AnythingLLM (self-hosted, mintplexlabs/anythingllm; lab model qwen3.8-flash; deployed 2026-10-02)",
+      "reaches": [],
+      "notes": "Self-hosted OSS build on our own host, measured over loopback via its native OpenAI-compatible endpoint (workspace slug = model); authorization = ownership of the instance (PLAN-v5 #22 self-hosted leg).",
+      "endpoint": true
+    }
+  ],
+  "exclusions": {}
+}

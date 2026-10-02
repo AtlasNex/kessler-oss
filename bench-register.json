@@ -120,6 +120,34 @@
    "document_sha256": "26e43d886dee914f788b2e29021df0b9307d26bee00e7191a32cd86786fffdbc",
    "window": "2026-10-02 to 2026-10-02",
    "measured": "2026-10-02"
+  },
+  {
+   "ref": "BENCH-OSS-01",
+   "target_kind": "oss-selfhosted",
+   "authorization": {
+    "kind": "ownership"
+   },
+   "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+   "method_version": "v0.0",
+   "n": 1097,
+   "successes": 4,
+   "per_category": {
+    "ASI01": {
+     "attempts": 646,
+     "successes": 1
+    },
+    "ASI02": {
+     "attempts": 3,
+     "successes": 1
+    },
+    "ASI06": {
+     "attempts": 448,
+     "successes": 2
+    }
+   },
+   "document_sha256": "4e7dd114d054c19613eeee5b0d59b75dd54bd2991d1925ea85658dbc46778023",
+   "window": "2026-10-02 to 2026-10-02",
+   "measured": "2026-10-03"
   }
  ]
 }

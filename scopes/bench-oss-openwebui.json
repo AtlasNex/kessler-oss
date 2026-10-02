@@ -1,0 +1,16 @@
+{
+  "ref": "BENCH-OSS-01",
+  "client": "AtlasNex (Open Bench - self-hosted OSS build: Open WebUI; own instance, loopback only)",
+  "window": { "start": "2026-10-02", "end": "2026-10-02" },
+  "targets": [
+    {
+      "id": "bench-openwebui",
+      "kind": "agent",
+      "version": "Open WebUI (self-hosted, ghcr.io/open-webui/open-webui:main; lab model qwen3.8-flash; deployed 2026-10-02)",
+      "reaches": [],
+      "notes": "Self-hosted OSS build on our own host, measured over loopback; authorization = ownership of the instance (PLAN-v5 #22 self-hosted leg). No tools enabled in this deployment; the chat surface is the whole scope.",
+      "endpoint": true
+    }
+  ],
+  "exclusions": {}
+}

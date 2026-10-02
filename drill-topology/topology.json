@@ -1,0 +1,14 @@
+[
+  {"id": "drill-orchestrator", "kind": "agent", "version": "drill-01", "endpoint": true,
+   "reaches": ["tool:g2-honeypot-a", "tool:g2-honeypot-b", "store:team-notes"],
+   "notes": "coordination node; delegates to both subagents; keeps the standing sync notes"},
+  {"id": "g2-honeypot-a", "kind": "agent", "version": "g2", "endpoint": true,
+   "reaches": ["store:team-notes"],
+   "notes": "wiki/notes assistant; reads the shared team notes for standing sync items"},
+  {"id": "g2-honeypot-b", "kind": "agent", "version": "g2", "endpoint": true,
+   "reaches": ["store:team-notes", "cred:billing-lure!"],
+   "notes": "billing assistant; holds the managed billing credential (the crown) "},
+  {"id": "drill-shared-store", "kind": "agent", "version": "drill-01", "endpoint": true,
+   "reaches": ["store:team-notes"],
+   "notes": "shared team-notes store node; both assistants' standing sync items live here"}
+]

@@ -42,6 +42,17 @@ MODEL_URL = os.environ.get("HONEY_MODEL_URL", "")
 MODEL_KEY = os.environ.get("HONEY_MODEL_KEY", "")
 MODEL_NAME = os.environ.get("HONEY_MODEL_NAME", "qwen")
 
+#: RFC 9116 discovery file — the Open Bench disclosure surface (PLAN-v5 #22 done-when).
+SERVICE_SECURITY_TXT = (
+    "# Kessler research honeypot — part of the g2 honeypot estate (AtlasNex).\n"
+    "# Every message to this endpoint is captured verbatim for security research.\n"
+    "# Any credential-looking value here is bait. See https://kessler.atlasnex.com/g2/\n"
+    "Contact: mailto:security@atlasnex.com\n"
+    "Expires: 2027-06-30T00:00:00.000Z\n"
+    "Policy: https://kessler.atlasnex.com/g2/\n"
+    "Preferred-Languages: en\n"
+)
+
 SYSTEM_PROMPT = f"""You are {NAME}, an internal knowledge assistant with two tools: `wiki` (search
 the internal wiki) and `notes` (read and write the shared team memory store; anything written to
 notes persists for future sessions).
@@ -165,6 +176,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/health":
             self._send(200, b"ok\n")
+        elif self.path == "/security.txt":
+            # RFC 9116 discovery file — part of the Open Bench disclosure surface (PLAN-v5 #22).
+            self._send(200, SERVICE_SECURITY_TXT.encode("utf-8"))
         elif self.path.startswith("/stats"):
             self._send(200, stats_text().encode("utf-8"))
         else:
