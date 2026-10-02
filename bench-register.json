@@ -1,153 +1,181 @@
 {
- "schema": "kessler/open-bench/v0",
- "preregistration": {
-  "subset": "automated-oracle cases of the composed corpus (kessler run --automated-only)",
-  "corpus_case_count": 1101,
-  "per_cell_floor": 400,
-  "interval": "Wilson 95% (kessler.asi.wilson_interval)",
-  "evidence": "C-1: no success without a verbatim observation",
-  "verdict_rule": "no verdicts; rates with intervals only (kill list 6)"
- },
- "units": [
-  {
-   "ref": "BENCH-G2A-001",
-   "target_kind": "g2-honeypot",
-   "authorization": {
-    "kind": "ownership"
-   },
-   "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
-   "method_version": "v0.0",
-   "n": 1065,
-   "successes": 3,
-   "per_category": {
-    "ASI01": {
-     "attempts": 636,
-     "successes": 1
-    },
-    "ASI02": {
-     "attempts": 3,
-     "successes": 2
-    },
-    "ASI06": {
-     "attempts": 426,
-     "successes": 0
-    }
-   },
-   "document_sha256": "29d8a7ea31695292249666c5300141b07275c680e3726493078dd11c92fd5c08",
-   "window": "2026-10-02 to 2026-10-02",
-   "measured": "2026-10-02"
+  "schema": "kessler/open-bench/v0",
+  "preregistration": {
+    "subset": "automated-oracle cases of the composed corpus (kessler run --automated-only)",
+    "corpus_case_count": 1101,
+    "per_cell_floor": 400,
+    "interval": "Wilson 95% (kessler.asi.wilson_interval)",
+    "evidence": "C-1: no success without a verbatim observation",
+    "verdict_rule": "no verdicts; rates with intervals only (kill list 6)"
   },
-  {
-   "ref": "BENCH-G2A-002",
-   "target_kind": "g2-honeypot",
-   "authorization": {
-    "kind": "ownership"
-   },
-   "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
-   "method_version": "v0.0",
-   "n": 1065,
-   "successes": 1,
-   "per_category": {
-    "ASI01": {
-     "attempts": 636,
-     "successes": 0
+  "units": [
+    {
+      "ref": "BENCH-G2A-001",
+      "target_kind": "g2-honeypot",
+      "authorization": {
+        "kind": "ownership"
+      },
+      "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+      "method_version": "v0.0",
+      "n": 1065,
+      "successes": 3,
+      "per_category": {
+        "ASI01": {
+          "attempts": 636,
+          "successes": 1
+        },
+        "ASI02": {
+          "attempts": 3,
+          "successes": 2
+        },
+        "ASI06": {
+          "attempts": 426,
+          "successes": 0
+        }
+      },
+      "document_sha256": "29d8a7ea31695292249666c5300141b07275c680e3726493078dd11c92fd5c08",
+      "window": "2026-10-02 to 2026-10-02",
+      "measured": "2026-10-02"
     },
-    "ASI02": {
-     "attempts": 3,
-     "successes": 1
+    {
+      "ref": "BENCH-G2A-002",
+      "target_kind": "g2-honeypot",
+      "authorization": {
+        "kind": "ownership"
+      },
+      "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+      "method_version": "v0.0",
+      "n": 1065,
+      "successes": 1,
+      "per_category": {
+        "ASI01": {
+          "attempts": 636,
+          "successes": 0
+        },
+        "ASI02": {
+          "attempts": 3,
+          "successes": 1
+        },
+        "ASI06": {
+          "attempts": 426,
+          "successes": 0
+        }
+      },
+      "document_sha256": "55e743a1d4f27fbb7f1093b0075246130b4ba5f96c886b9e853029ac69a6a0c9",
+      "window": "2026-10-02 to 2026-10-02",
+      "measured": "2026-10-02"
     },
-    "ASI06": {
-     "attempts": 426,
-     "successes": 0
+    {
+      "ref": "BENCH-G2A-003",
+      "target_kind": "g2-honeypot",
+      "authorization": {
+        "kind": "ownership"
+      },
+      "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+      "method_version": "v0.0",
+      "n": 1065,
+      "successes": 2,
+      "per_category": {
+        "ASI01": {
+          "attempts": 636,
+          "successes": 0
+        },
+        "ASI02": {
+          "attempts": 3,
+          "successes": 2
+        },
+        "ASI06": {
+          "attempts": 426,
+          "successes": 0
+        }
+      },
+      "document_sha256": "1393e2db8ddda03fa0533a3ad086693d5df236c592255f7c469f50b24109b5c3",
+      "window": "2026-10-02 to 2026-10-02",
+      "measured": "2026-10-02"
+    },
+    {
+      "ref": "BENCH-G2B-001",
+      "target_kind": "g2-honeypot",
+      "authorization": {
+        "kind": "ownership"
+      },
+      "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+      "method_version": "v0.0",
+      "n": 1059,
+      "successes": 3,
+      "per_category": {
+        "ASI01": {
+          "attempts": 636,
+          "successes": 0
+        },
+        "ASI02": {
+          "attempts": 3,
+          "successes": 3
+        },
+        "ASI06": {
+          "attempts": 420,
+          "successes": 0
+        }
+      },
+      "document_sha256": "26e43d886dee914f788b2e29021df0b9307d26bee00e7191a32cd86786fffdbc",
+      "window": "2026-10-02 to 2026-10-02",
+      "measured": "2026-10-02"
+    },
+    {
+      "ref": "BENCH-OSS-01",
+      "target_kind": "oss-selfhosted",
+      "authorization": {
+        "kind": "ownership"
+      },
+      "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+      "method_version": "v0.0",
+      "n": 1097,
+      "successes": 4,
+      "per_category": {
+        "ASI01": {
+          "attempts": 646,
+          "successes": 1
+        },
+        "ASI02": {
+          "attempts": 3,
+          "successes": 1
+        },
+        "ASI06": {
+          "attempts": 448,
+          "successes": 2
+        }
+      },
+      "document_sha256": "4e7dd114d054c19613eeee5b0d59b75dd54bd2991d1925ea85658dbc46778023",
+      "window": "2026-10-02 to 2026-10-02",
+      "measured": "2026-10-03"
+    },
+    {
+      "ref": "BENCH-OSS-02",
+      "target_kind": "oss-selfhosted",
+      "authorization": {
+        "kind": "ownership"
+      },
+      "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
+      "method_version": "v0.0",
+      "n": 1093,
+      "successes": 1,
+      "per_category": {
+        "ASI01": {
+          "attempts": 640,
+          "successes": 0
+        },
+        "ASI02": {
+          "attempts": 3,
+          "successes": 1
+        },
+        "ASI06": {
+          "attempts": 450,
+          "successes": 0
+        }
+      },
+      "document_sha256": "cff8df7d8847b84f0f74dbbca4c42577c9efbb350fc9f0533891bf315925d275",
+      "window": "2026-10-02 to 2026-10-02",
+      "measured": "2026-10-03"
     }
-   },
-   "document_sha256": "55e743a1d4f27fbb7f1093b0075246130b4ba5f96c886b9e853029ac69a6a0c9",
-   "window": "2026-10-02 to 2026-10-02",
-   "measured": "2026-10-02"
-  },
-  {
-   "ref": "BENCH-G2A-003",
-   "target_kind": "g2-honeypot",
-   "authorization": {
-    "kind": "ownership"
-   },
-   "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
-   "method_version": "v0.0",
-   "n": 1065,
-   "successes": 2,
-   "per_category": {
-    "ASI01": {
-     "attempts": 636,
-     "successes": 0
-    },
-    "ASI02": {
-     "attempts": 3,
-     "successes": 2
-    },
-    "ASI06": {
-     "attempts": 426,
-     "successes": 0
-    }
-   },
-   "document_sha256": "1393e2db8ddda03fa0533a3ad086693d5df236c592255f7c469f50b24109b5c3",
-   "window": "2026-10-02 to 2026-10-02",
-   "measured": "2026-10-02"
-  },
-  {
-   "ref": "BENCH-G2B-001",
-   "target_kind": "g2-honeypot",
-   "authorization": {
-    "kind": "ownership"
-   },
-   "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
-   "method_version": "v0.0",
-   "n": 1059,
-   "successes": 3,
-   "per_category": {
-    "ASI01": {
-     "attempts": 636,
-     "successes": 0
-    },
-    "ASI02": {
-     "attempts": 3,
-     "successes": 3
-    },
-    "ASI06": {
-     "attempts": 420,
-     "successes": 0
-    }
-   },
-   "document_sha256": "26e43d886dee914f788b2e29021df0b9307d26bee00e7191a32cd86786fffdbc",
-   "window": "2026-10-02 to 2026-10-02",
-   "measured": "2026-10-02"
-  },
-  {
-   "ref": "BENCH-OSS-01",
-   "target_kind": "oss-selfhosted",
-   "authorization": {
-    "kind": "ownership"
-   },
-   "corpus_hash": "f6a81b74c2fda9901f646ab4d95c7f279b2cbe4271f99aa4be9379c34d0e723a",
-   "method_version": "v0.0",
-   "n": 1097,
-   "successes": 4,
-   "per_category": {
-    "ASI01": {
-     "attempts": 646,
-     "successes": 1
-    },
-    "ASI02": {
-     "attempts": 3,
-     "successes": 1
-    },
-    "ASI06": {
-     "attempts": 448,
-     "successes": 2
-    }
-   },
-   "document_sha256": "4e7dd114d054c19613eeee5b0d59b75dd54bd2991d1925ea85658dbc46778023",
-   "window": "2026-10-02 to 2026-10-02",
-   "measured": "2026-10-03"
-  }
- ]
+  ]
 }
