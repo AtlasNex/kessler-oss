@@ -38,3 +38,7 @@ desktop.ini
 build/
 run-g2-live/
 run-a7-corpus/
+
+# session scratch
+scratch-*/
+scripts/wp*-*.py

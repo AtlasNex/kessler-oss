@@ -312,6 +312,11 @@ def cmd_plan(args) -> int:
     if not getattr(args, "techniques_only", False):
         cases, _, behaviors = build(args.dataset, getattr(args, "behaviors", None))
         cases = [c for c in cases if c.category not in excluded]
+        if getattr(args, "automated_only", False):
+            # The preregistered subset (PLAN-v5 2.3): ONLY automated-oracle techniques can
+            # score a baseline cell; manual rows would leave the denominator as pending.
+            auto_ids = {t.id for t in techniques if t.is_automated}
+            cases = [c for c in cases if c.technique_id in auto_ids]
         cases = sample(cases, getattr(args, "sample", 0) or 0,
                        min_per_category=getattr(args, "min_per_category", 0) or 0)
         power = achieved_power(cases)
@@ -325,6 +330,17 @@ def cmd_plan(args) -> int:
               "(--techniques-only falls back to the technique unit)")
     print(f"PLANNED ATTEMPTS  {count * max(len(targets), 1)} "
           f"({count} {unit} x {max(len(targets), 1)} target(s))")
+    if getattr(args, "budget", False):
+        if getattr(args, "techniques_only", False):
+            print("BUDGET  REFUSED: the meter projects the corpus unit (quoted runs are "
+                  "corpus runs); drop --techniques-only. (No corpus, no quote — PLAN-v5 #21.)")
+        else:
+            from .estate import estimate, render_estimate_md
+            print()
+            print("RUN COST / POWER METER (PLAN-v5 #21) — a plan is not quoted until this "
+                  "projection exists:")
+            print(render_estimate_md(estimate(cases, targets,
+                                              lanes=getattr(args, "lanes", 8))))
     print("This is the coverage denominator the report will demand (C-4). Run `kessler run` "
           "to execute.")
     return 0
@@ -504,6 +520,11 @@ def cmd_run(args) -> int:
         # ASI category; --techniques-only falls back to the 25-technique unit.
         cases, _, behaviors = build(args.dataset, getattr(args, "behaviors", None))
         cases = [c for c in cases if c.category not in excluded]
+        if getattr(args, "automated_only", False):
+            # The preregistered subset (PLAN-v5 2.3): ONLY automated-oracle techniques can
+            # score a baseline cell; manual rows would leave the denominator as pending.
+            auto_ids = {t.id for t in techniques if t.is_automated}
+            cases = [c for c in cases if c.technique_id in auto_ids]
         total = len(cases)
         cases = sample(cases, getattr(args, "sample", 0) or 0,
                        min_per_category=getattr(args, "min_per_category", 0) or 0)
@@ -622,10 +643,18 @@ def cmd_validate(args) -> int:
 
 
 def cmd_report(args) -> int:
-    from .report import self_check, write_all
+    from .report import attach_baseline_registry, self_check, write_all
 
     try:
         eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+        if args.baseline:
+            from .baseline import load_registry
+            from .capsule import canonical_corpus_hash
+            registry = load_registry(args.baseline)
+            chash = args.corpus_hash or canonical_corpus_hash()
+            attach_baseline_registry(eng, registry, chash)
+            print(f"BASELINE  registry loaded ({len(registry['entries'])} entries), "
+                  f"corpus pin {chash[:12]}…")
         issues = self_check(eng)
         if issues:
             for i in issues:
@@ -858,6 +887,265 @@ def cmd_verify_attestation(args) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- capsule & proof kit
+
+def cmd_capsule(args) -> int:
+    """PLAN-v5 #11: build the Verifiable Evidence Capsule for one engagement document."""
+    from . import capsule
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    try:
+        corpus_hash = args.corpus_hash or capsule.canonical_corpus_hash()
+        doc = capsule.build_capsule(eng, {
+            "engagement_ref": eng.ref,
+            "scope_sha256": eng.scope_sha256,
+            "corpus_hash": corpus_hash,
+            "method": args.method,
+            "created_at": args.created or _utc_now_iso(),
+        })
+    except ValueError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    out = Path(args.out)
+    if out.parent != Path("."):
+        out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"WROTE  {out}")
+    print(f"HEAD   {doc['head_hash']}")
+    print("ANCHOR  record the head hash in the public anchor (kessler-oss, or the site's "
+          "/verify/ page) — the anchor step is a human act; the capsule is what it anchors.")
+    return 0
+
+
+def _utc_now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def cmd_verify_capsule(args) -> int:
+    """Recompute every figure from the capsule's chained evidence; exit 1 on ANY drift.
+
+    This is the OSS-side check a client (or their auditor, or us) runs against a delivered
+    capsule. Novee exit convention as in `gate`: 0 valid, 1 tampered/invalid, 2 unusable."""
+    from . import capsule
+
+    try:
+        doc = json.loads(Path(args.capsule).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"REFUSED: cannot read the capsule: {exc}", file=sys.stderr)
+        return 2
+    result = capsule.verify_capsule(doc)
+    print(result.render())
+    if result.ok:
+        return 0
+    return 1
+
+
+def cmd_proofkit(args) -> int:
+    """PLAN-v5 Wave 1: render the Receivable Proof Kit for one engagement document."""
+    from . import proofkit
+    from .report import assert_emittable
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    try:
+        assert_emittable(eng)   # C-4: proof artifacts are emission surfaces too
+    except LintError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    existing = None
+    if args.tracker:
+        try:
+            existing = json.loads(Path(args.tracker).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"REFUSED: cannot read the tracker export: {exc}", file=sys.stderr)
+            return 2
+    outdir = Path(args.out)
+    outdir.mkdir(parents=True, exist_ok=True)
+    if args.certificate:
+        try:
+            cert = proofkit.render_retest_certificate(
+                eng, issued=args.issued or _utc_now_iso()[:10],
+                retest_window=args.retest_window or "retest delivered with the engagement")
+        except ValueError as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 2
+        p = outdir / "retest-certificate.md"
+        p.write_text(cert, encoding="utf-8")
+        print(f"WROTE  {p}")
+        return 0
+    written = []
+    for name, text in proofkit.render_proofkit(
+            eng, existing=existing, retest_window=args.retest_window,
+            verify_url=args.verify_url, previous_ref=args.previous).items():
+        p = outdir / name
+        p.write_text(text, encoding="utf-8")
+        written.append(p)
+    for p in written:
+        print(f"WROTE  {p}")
+    print("NOTE  the retest certificate renders only with --certificate against a document "
+          "that carries a real retest block; it is not part of the bundle by default.")
+    return 0
+
+
+def cmd_drift(args) -> int:
+    """PLAN-v5 #19: the MCP drift radar over a schedule of snapshot files."""
+    from . import drift
+
+    snapshots: list[tuple[str, dict]] = []
+    for spec in args.snapshot:
+        # spec: "stamp=path" (stamp rides the page; path is a kessler/mcp-snapshot/v1 file)
+        stamp, _, path = spec.partition("=")
+        try:
+            snap = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"REFUSED: snapshot {path}: {exc}", file=sys.stderr)
+            return 2
+        snapshots.append((stamp, snap))
+    if len(snapshots) < 2:
+        print("REFUSED: the radar needs >= 2 collections (one boundary) — a single snapshot "
+              "is `kessler mcp-audit`, not drift.", file=sys.stderr)
+        return 2
+    text = drift.render_drift_full(snapshots, public=not args.private)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_cascade(args) -> int:
+    """PLAN-v5 #20: cascade chain-search over an engagement's declared reach graph."""
+    from . import cascade
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    report = cascade.attach_findings(cascade.search_chains(eng.targets), eng.findings)
+    if args.json:
+        out = Path(args.json)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n",
+                       encoding="utf-8")
+        print(f"WROTE  {out}")
+    text = cascade.render_cascade_md(report, top=args.top)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_memory(args) -> int:
+    """PLAN-v5 #17: score an engagement's memory-pack attempts into L1/L2/L3 levels."""
+    from . import memorypack
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    score = memorypack.score_memory_pack(memorypack.attempts_to_triples(eng))
+    text = memorypack.render_memory_md(score)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_containment(args) -> int:
+    """PLAN-v5 #18: render a Containment Profile from measured boundary rows."""
+    from . import containment
+
+    try:
+        rows = json.loads(Path(args.rows).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"REFUSED: cannot read the boundary rows: {exc}", file=sys.stderr)
+        return 2
+    try:
+        profile = containment.score_containment(rows)
+    except ValueError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    text = containment.render_containment_md(profile, estate=args.estate)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_rollup(args) -> int:
+    """PLAN-v5 #21: per-target rollup of one engagement (Standing-Attestation tenants)."""
+    from . import estate
+
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    text = estate.render_rollup_md(estate.rollup(eng))
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"WROTE  {args.out}")
+    else:
+        print(text)
+    return 0
+
+
+def cmd_baseline(args) -> int:
+    """PLAN-v5 #15: register/inspect baseline units (the comparator's source of truth)."""
+    from . import baseline
+    from .capsule import canonical_corpus_hash
+
+    reg_path = Path(args.registry)
+    if args.list:
+        if not reg_path.exists():
+            print(f"REFUSED: no registry at {reg_path}", file=sys.stderr)
+            return 2
+        reg = baseline.load_registry(reg_path)
+        print(baseline.render_registry_md(reg))
+        return 0
+    try:
+        eng = parse(json.loads(Path(args.document).read_text(encoding="utf-8")))
+    except (OSError, json.JSONDecodeError, SchemaError) as exc:
+        print(f"REFUSED: cannot load the engagement document: {exc}", file=sys.stderr)
+        return 2
+    entry = baseline.baseline_entry(args.ref, args.source, f"{eng.start} to {eng.end}",
+                                   args.method, args.corpus_hash or canonical_corpus_hash(),
+                                   eng.scope_sha256, eng.attempts)
+    if reg_path.exists():
+        reg = baseline.load_registry(reg_path)
+        if any(e["ref"] == entry["ref"] for e in reg["entries"]):
+            print(f"REFUSED: baseline ref {entry['ref']!r} already registered — supersede it "
+                  "under a new ref (C-9: nothing retrochanges the register)", file=sys.stderr)
+            return 2
+    else:
+        reg = {"schema": baseline.BASELINE_SCHEMA, "entries": []}
+    reg["entries"].append(entry)
+    reg["entries"].sort(key=lambda e: e["ref"])
+    baseline.save_registry(reg, reg_path)
+    print(f"REGISTERED {entry['ref']} in {reg_path}: n={entry['n']} successes={entry['successes']}")
+    print("PUBLISH RULE  a cell prints a baseline rate only at n >= "
+          f"{baseline.N_FLOOR} automated-oracle attempts (preregistered); below it the "
+          "comparator prints 'not yet powered' and publishes nothing.")
+    return 0
+
+
 # --------------------------------------------------------------------------- parser
 
 def build_parser() -> argparse.ArgumentParser:
@@ -880,6 +1168,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="F-6b: reserve this many sampled cases per ASI category first (the "
                          "floor a regression gate needs); the rest deals round-robin")
     sp.add_argument("--behaviors", help="behaviour-pack directory override")
+    sp.add_argument("--budget", action="store_true",
+                    help="project wall-clock (measured G2 s/unit) and the detection floor "
+                         "for this plan before any client quote (PLAN-v5 #21)")
+    sp.add_argument("--lanes", type=int, default=8,
+                    help="--budget: lane count for the wall-clock projection (default 8)")
+    sp.add_argument("--automated-only", action="store_true", dest="automated_only",
+                    help="preview only cases whose technique carries an automated effect "
+                         "oracle (the preregistered subset; matches `run --automated-only`)")
     sp.set_defaults(fn=cmd_plan)
 
     sp = sub.add_parser("run", help="execute the plan and record the engagement document")
@@ -905,6 +1201,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--min-per-category", type=int, default=0, dest="min_per_category",
                     help="F-6b: reserve this many sampled cases per ASI category first (the "
                          "floor a regression gate needs); the rest deals round-robin")
+    sp.add_argument("--automated-only", action="store_true", dest="automated_only",
+                    help="run only cases whose technique carries an automated effect oracle "
+                         "(the preregistered baseline/Open-Bench subset, PLAN-v5 section 2.3: "
+                         "a cell publishes only automated-oracle attempts)")
     sp.add_argument("--behaviors", help="behaviour-pack directory override")
     sp.set_defaults(fn=cmd_run)
 
@@ -941,6 +1241,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("report", help="emit all five artefacts (C-4 gated)")
     sp.add_argument("document", help="engagement JSON document")
     sp.add_argument("--out", default="out", help="output directory")
+    sp.add_argument("--baseline", help="baseline registry JSON (kessler/baseline-registry/v1); "
+                                       "adds the public-baseline comparator to section 4")
+    sp.add_argument("--corpus-hash", dest="corpus_hash",
+                    help="the corpus pin the run was against (default: recompute the current "
+                         "corpus hash; a mismatch against the registry pins makes every cell "
+                         "'not comparable', which is the honest result, not an error)")
     sp.set_defaults(fn=cmd_report)
 
     sp = sub.add_parser("triage", help="rank/cluster candidate findings for human attention "
@@ -997,6 +1303,97 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("attestation", help="attestation JSON (kessler/attestation/v1)")
     sp.add_argument("--inventory", required=True, help="current MCP snapshot JSON")
     sp.set_defaults(fn=cmd_verify_attestation)
+
+    sp = sub.add_parser("capsule", help="Verifiable Evidence Capsule: hash-chain every attempt "
+                                        "and the verdict block so a third party can recompute "
+                                        "the whole report from the evidence (PLAN-v5 #11)")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--out", default="capsule.json", help="capsule JSON to write")
+    sp.add_argument("--method", required=True,
+                    help="the method string pinned in the capsule (driver / judge / oracle)")
+    sp.add_argument("--corpus-hash", dest="corpus_hash",
+                    help="corpus pin (default: recompute the current corpus's hash)")
+    sp.add_argument("--created", help="ISO timestamp override (deterministic builds/tests)")
+    sp.set_defaults(fn=cmd_capsule)
+
+    sp = sub.add_parser("verify-capsule", help="recompute a capsule from its chained evidence "
+                                               "(exit 0 valid / 1 tampered / 2 unusable)")
+    sp.add_argument("capsule", help="capsule JSON (kessler/capsule/v1)")
+    sp.set_defaults(fn=cmd_verify_capsule)
+
+    sp = sub.add_parser("proofkit", help="the Receivable Proof Kit: board summary, coverage "
+                                         "heatmap, remediation log, underwriter pack, RFI annex "
+                                         "(PLAN-v5 Wave 1); --certificate for the retest cert")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--out", default="proofkit", help="output directory")
+    sp.add_argument("--tracker", help="client tracker export JSON (finding_id -> row) to merge "
+                                      "into the remediation log")
+    sp.add_argument("--retest-window", dest="retest_window", default="",
+                    help="retest window text (default: 30 days from window end)")
+    sp.add_argument("--verify-url", dest="verify_url", default="",
+                    help="the /verify URL printed on the underwriter pack")
+    sp.add_argument("--previous", default="",
+                    help="reference of the previous run, for 'what changed since'")
+    sp.add_argument("--certificate", action="store_true",
+                    help="render ONLY the retest certificate (requires a retest block)")
+    sp.add_argument("--issued", default="", help="issue date for the certificate")
+    sp.set_defaults(fn=cmd_proofkit)
+
+    sp = sub.add_parser("drift", help="MCP drift radar: hash-pinned tools/list diffing over a "
+                                      "schedule of snapshots (Deadbugz class, PLAN-v5 #19)")
+    sp.add_argument("--snapshot", action="append", required=True, metavar="STAMP=PATH",
+                    help="one collection: '2026-10-01T00:00Z=path.json'; repeat, >= 2")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.add_argument("--private", action="store_true",
+                    help="alert form (names the estate's tools for the owning client)")
+    sp.set_defaults(fn=cmd_drift)
+
+    sp = sub.add_parser("cascade", help="cascade chain-search: enumerate multi-hop paths over "
+                                        "the declared reach graph (ASI08, PLAN-v5 #20). A "
+                                        "search result is a CANDIDATE path, never an ASR claim.")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.add_argument("--json", help="also write the full chain report as JSON here")
+    sp.add_argument("--top", type=int, default=12, help="rows to render (default 12)")
+    sp.set_defaults(fn=cmd_cascade)
+
+    sp = sub.add_parser("memory-score", help="score an engagement's memory-pack attempts into "
+                                             "L1 write-retrieval / L2 cross-session / L3 "
+                                             "trigger-gated levels (PLAN-v5 #17)")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.set_defaults(fn=cmd_memory)
+
+    sp = sub.add_parser("containment", help="render a Containment Profile: per-boundary "
+                                            "held-rates over N runs with intervals, expiry, "
+                                            "AIUC-1 mapping (PLAN-v5 #18)")
+    sp.add_argument("rows", help='boundary rows JSON: [{"boundary":"egress-allowlist",'
+                                 '"runs":50,"held":48}, ...]')
+    sp.add_argument("--estate", default="", help="estate name to print on the profile")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.set_defaults(fn=cmd_containment)
+
+    sp = sub.add_parser("rollup", help="per-target rollup of one engagement — the estate view "
+                                       "Standing Attestation tenants key on (PLAN-v5 #21)")
+    sp.add_argument("document", help="engagement JSON document")
+    sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.set_defaults(fn=cmd_rollup)
+
+    sp = sub.add_parser("baseline", help="baseline register: --list renders it; a document "
+                                         "registers one baseline unit (PLAN-v5 #15, N-floor "
+                                         "publish rule printed with every add)")
+    sp.add_argument("document", nargs="?", help="engagement JSON document (the run to register)")
+    sp.add_argument("--registry", default="baseline-registry.json",
+                    help="registry JSON path (default ./baseline-registry.json)")
+    sp.add_argument("--ref", default="", help="unit reference (e.g. BASE-001)")
+    sp.add_argument("--source", default="", help="what produced the run (lab/honeypot/rehearsal)")
+    sp.add_argument("--method", default="manual",
+                    choices=("automated-oracle", "manual", "mixed"),
+                    help="the oracle class — only automated-oracle units feed the comparator")
+    sp.add_argument("--corpus-hash", dest="corpus_hash", default="",
+                    help="corpus pin (default: recompute the current corpus hash)")
+    sp.add_argument("--list", action="store_true", help="render the register, add nothing")
+    sp.set_defaults(fn=cmd_baseline)
     return p
 
 

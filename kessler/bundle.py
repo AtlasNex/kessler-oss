@@ -98,7 +98,7 @@ STANDARDS_BLOCK_V2 = (
 #: case-insensitive. Deliberately narrow: it must catch the overclaims that would end the practice
 #: without firing on honest words like "tested" or "unified".
 _CERTIFICATION_RE = re.compile(
-    r"\b(?:certified|certification|accredited|accreditation"
+    r"\b(?:certif(?:y|ies|ied|ication)|accredit(?:ed|ation|s)"
     r"|compliant with|meets the framework"
     r"|compliance with (?:the )?(?:eu ai act|iso|iec|nist))\b",
     re.IGNORECASE,

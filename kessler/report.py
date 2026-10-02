@@ -225,6 +225,40 @@ def _retest_appendix(engagement) -> str:
     return "\n".join(lines)
 
 
+def _comparator_section(engagement) -> str:
+    """The public-baseline comparator (PLAN-v5 #15): "you X% [a, b] vs baseline Y% [c, d] —
+    same corpus, same method". Silent when no registry is loaded (`attach_baseline_registry`
+    gave this engagement a pin) — the client run's own figures never depend on it.
+
+    Baseline rates are registered measurements, not this run's ASRs; the linter's prose rule
+    gets them via `_baseline_asr_values` so quoting a published number in the report is not
+    flagged as a hand-typed figure. (The corpus pin lives on the engagement object as a private
+    attribute — schema v1 stays closed-world; a document field would be a schema bump.)
+    """
+    from .baseline import comparator_rows, render_comparator_md
+
+    registry = getattr(engagement, "_baseline_registry", None)
+    corpus_hash = getattr(engagement, "_corpus_hash", "")
+    if registry is None:
+        return (
+            "No baseline comparison attached: pass `--baseline registry.json` to `kessler "
+            "report`, or export the register from a powered run. An absent comparator is an "
+            "honest gap, never a fabricated benchmark."
+        )
+    rows = comparator_rows(engagement, registry, corpus_hash)
+    engagement._baseline_asr_values = [r["asr"] for r in rows if "asr" in r]
+    return render_comparator_md(rows)
+
+
+def attach_baseline_registry(engagement, registry: dict, corpus_hash: str) -> None:
+    """Attach the baseline register + the run's corpus pin to an engagement (report-time only;
+    never serialised into the document)."""
+    engagement._baseline_registry = registry
+    engagement._corpus_hash = corpus_hash
+    if not hasattr(engagement, "_baseline_asr_values"):
+        engagement._baseline_asr_values = []
+
+
 def render_report(engagement) -> str:
     """The 10-section deliverable. Fails closed: refuses to render incomplete coverage."""
     assert_emittable(engagement)
@@ -312,7 +346,9 @@ def render_report(engagement) -> str:
         ("1. Cover and engagement facts", "\n".join(s1)),
         ("2. Executive summary", s2),
         ("3. Scope and methodology", s3),
-        ("4. Attack success rate table", _asr_table(engagement)),
+        ("4. Attack success rate table",
+         _asr_table(engagement) + "\n\n### Public baseline comparator\n\n"
+         + _comparator_section(engagement)),
         (
             "5. Findings",
             (
@@ -378,13 +414,25 @@ def render_coverage(engagement) -> str:
     return "\n".join(lines)
 
 
-def render_attestation(engagement) -> str:
+def attestation_expiry(start: str, days: int = 90) -> str:
+    """The 90-day expiry from the testing window's end (PLAN-v5 #2: an attestation that ages
+    into a calendar is a re-attestation funnel; one that never expires is a false promise)."""
+    from datetime import date, timedelta
+    return (date.fromisoformat(start) + timedelta(days=days)).isoformat()
+
+
+def render_attestation(engagement, *, verify_url: str = "") -> str:
     """The narrow attestation. Scope-only wording; overclaiming here is the mistake that ends a practice."""
     retest_line = (
         "Findings remediated by the client were retested; before and after attack success rates are "
         "recorded in the report appendix."
         if engagement.retest is not None
         else "No retest was performed in this engagement."
+    )
+    expiry = attestation_expiry(engagement.end)
+    verify_line = (
+        f"\n**Verification:** {verify_url}\n"
+        if verify_url else ""
     )
     return f"""# Attestation Letter
 
@@ -394,7 +442,8 @@ def render_attestation(engagement) -> str:
 **Date:** [DATE]
 **Engagement reference:** {engagement.ref}
 **Scope document:** signed, SHA-256 `{engagement.scope_sha256}`
-
+**Valid until:** {expiry} (90 days from window end; a lapsed attestation re-attests, it does not renew silently)
+{verify_line}
 ## Subject: attestation of adversarial testing performed
 
 To whom it may concern,

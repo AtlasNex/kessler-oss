@@ -216,6 +216,9 @@ def _all_computed_asr(engagement) -> list[float]:
     if engagement.retest is not None:
         values += [row["after_asr"] for row in
                    retest_delta(engagement.attempts, engagement.retest["attempts"]).values()]
+    # Baseline comparator figures are measured numbers too (PLAN-v5 #15): a published
+    # baseline rate quoted in section 4's comparator column is not "hand-written prose".
+    values += getattr(engagement, "_baseline_asr_values", [])
     return values
 
 
