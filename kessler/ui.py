@@ -136,9 +136,12 @@ footer { margin-top: 4rem; color: var(--muted); font-size: .78rem; border-top: 1
 /* ---- headline stat + ASR bar ---- */
 .big { font-size: 2.6rem; color: var(--amber); font-weight: 700; letter-spacing: -0.03em;
        font-family: var(--mono); line-height: 1.1; }
-.bar { height: 8px; background: var(--bg3); border: 1px solid var(--border2);
+/* .asr-bar, NOT .bar: the review workbench owns the bare .bar selector. Two components
+   under one generic class collided silently for years - the ASR chart's 8px overflow:hidden
+   clamp clipped the workbench's control bar to a 22px sliver (B-19). */
+.asr-bar { height: 8px; background: var(--bg3); border: 1px solid var(--border2);
        border-radius: 4px; overflow: hidden; display: flex; margin: .35rem 0 .8rem; }
-.bar i { display: block; height: 100%; }
+.asr-bar i { display: block; height: 100%; }
 
 /* ---- ASR chart (session 18): the interval is drawn, not just written ----
    A point without its band overstates precision; the band is the honest part. */
@@ -200,8 +203,8 @@ nav.chips .on { color: var(--amber); border-color: var(--amber); }
 /* ---- MOTION (each rule has a reason; all disabled under reduced-motion) ---- */
 /* ASR bars fill once on load: the bar is the measurement; animating its width ties the eye to
    the number it visualises. Short so it never delays reading. */
-.bar i { animation: barfill .7s ease-out both; }
-.bar i + i { animation-delay: .25s; }
+.asr-bar i { animation: barfill .7s ease-out both; }
+.asr-bar i + i { animation-delay: .25s; }
 @keyframes barfill { from { width: 0 !important; } }
 .sev { transition: filter .15s ease; }
 .sev:hover { filter: brightness(1.25); }
@@ -216,7 +219,7 @@ nav.toc a.active::before { content: "▸ "; }
 .top-link:hover { color: var(--amber); border-color: var(--amber); }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .bar i, .sev, .top-link { animation: none; transition: none; }
+  .asr-bar i, .sev, .top-link { animation: none; transition: none; }
 }
 
 /* ---- print: the client's PDF path. 60 pages of black ink is not a deliverable. ---- */
@@ -297,7 +300,7 @@ def _asr_bar(row: dict) -> str:
     asr = row["asr"]
     lo, hi = row["ci_low"] or 0.0, row["ci_high"] or 0.0
     return (
-        '<div class="bar" title="attack success rate with 95% interval">'
+        '<div class="asr-bar" title="attack success rate with 95% interval">'
         f'<i style="width:{hi * 100:.1f}%; background:rgba(255,182,39,.25)"></i>'
         f'<i style="width:{max(asr - lo, 0) * 100:.1f}%; background:var(--amber)"></i>'
         "</div>"
