@@ -383,7 +383,9 @@ NEX_ROOT = Path(__file__).resolve().parent.parent / "assets" / "nex"
 #: it). Round-robin rotation - a pool exists so one string never lands twice in a row.
 NEX_NOTES: dict[str, tuple[str, ...]] = {
     "empty": (
-        "nothing on the bench yet; the first run brings the first rows.",
+        # NOTE: never a state line verbatim - rotation once echoed the workbench line as the
+        # note (same sentence twice, every 3rd view). The note must ADD a voice, not repeat.
+        "an empty bench is not a pass; it is a run that has not happened.",
         "the bench fills when a run lands - this page is the reading room after.",
         "no rows to read yet; the command above starts the work.",
     ),
