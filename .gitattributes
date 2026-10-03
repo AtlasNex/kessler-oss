@@ -1,0 +1,5 @@
+# Shell/config files shipped to the Linux host must stay LF there — autocrlf=true would
+# otherwise check them out CRLF and bash chokes on \r (session 26 WP8, session 28 ops note).
+*.sh text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf

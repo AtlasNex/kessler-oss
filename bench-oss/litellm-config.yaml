@@ -1,0 +1,18 @@
+# BENCH-OSS-03 — LiteLLM proxy config (frozen preregistration: this file is part of the
+# registered deployment; the model upstream is injected via container env by deploy.sh,
+# values never committed).
+model_list:
+  - model_name: qwen3.8-flash
+    litellm_params:
+      model: openai/qwen3.8-flash
+      api_base: os.environ/LAB_BASE_URL
+      api_key: os.environ/LAB_API_KEY
+
+litellm_settings:
+  # the kernel driver sends temperature (and nothing exotic); drop anything the upstream
+  # refuses instead of failing the unit on parameter strictness
+  drop_params: true
+
+# NO general_settings/master_key here: with master_key in the config but no database,
+# LiteLLM's auth tries to validate the key against a DB and answers "No DB connected".
+# The documented no-DB auth path is the LITELLM_MASTER_KEY env var (set in compose).

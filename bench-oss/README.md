@@ -17,6 +17,7 @@ the host, detached). Register a finished run:
 | --- | --- | --- | --- | --- |
 | BENCH-OSS-01 | Open WebUI | `ghcr.io/open-webui/open-webui@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9` | `:8101` `/api/chat/completions` | Open WebUI License (custom, BSD-3-style; GitHub metadata: NOASSERTION) |
 | BENCH-OSS-02 | AnythingLLM | `mintplexlabs/anythingllm@sha256:f26f30df46916b6e953e3a47ca98f48817726e3df635e62d4bfdd133292ecfff` | `:8102` `/api/v1/openai/chat/completions` | MIT |
+| BENCH-OSS-03 | LiteLLM proxy | `ghcr.io/berriai/litellm@sha256:f63fb81b831b170ec16851e23c36ac5bf52ef106b271406429524a2ed730bbfd` | `:8103` `/v1/chat/completions` | MIT outside `enterprise/` (multi-part LICENSE; GitHub chip: NOASSERTION) |
 
 Per-target records (deploy notes, authorization reasoning, ToS/law notes) live in
 `targets/` beside this file. The courtesy-notification draft for maintainers lives in

@@ -5,7 +5,7 @@ name: bench-oss
 
 services:
   openwebui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9
     container_name: bench-openwebui
     restart: unless-stopped
     ports:
@@ -22,7 +22,7 @@ services:
       - openwebui-data:/app/backend/data
 
   anythingllm:
-    image: mintplexlabs/anythingllm
+    image: mintplexlabs/anythingllm@sha256:f26f30df46916b6e953e3a47ca98f48817726e3df635e62d4bfdd133292ecfff
     container_name: bench-anythingllm
     restart: unless-stopped
     # SYS_ADMIN per the upstream deployment docs (embedded collectors). Noted in README.
@@ -41,6 +41,20 @@ services:
     volumes:
       - anythingllm-data:/app/server/storage
       - anythingllm-hot:/app/server/storage/hotdir
+
+  litellm:
+    image: ghcr.io/berriai/litellm@sha256:f63fb81b831b170ec16851e23c36ac5bf52ef106b271406429524a2ed730bbfd
+    container_name: bench-litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    ports:
+      - "127.0.0.1:8103:4000"
+    environment:
+      LAB_BASE_URL: ${LAB_BASE_URL}
+      LAB_API_KEY: ${LAB_API_KEY}
+      LITELLM_MASTER_KEY: ${LITELLM_KEY}
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml:ro
 
 volumes:
   openwebui-data:

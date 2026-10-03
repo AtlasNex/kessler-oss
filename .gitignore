@@ -42,3 +42,4 @@ run-a7-corpus/
 # session scratch
 scratch-*/
 scripts/wp*-*.py
+run-bench-oss/
