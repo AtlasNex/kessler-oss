@@ -26,7 +26,7 @@ from .asi import compute_asr, coverage
 from .html_report import _esc, _interval, _pct, _sev_badge
 from .report import _SEVERITY_RANK
 from .schema import parse
-from .ui import _asr_chart, masthead, page
+from .ui import _asr_chart, masthead, nex_state, page
 
 _JSON_CT = "application/json; charset=utf-8"
 
@@ -46,18 +46,27 @@ nav.chips { position: sticky; top: 0; background: var(--bg); padding: .6rem 0;
 </style>"""
 
 
-def _viewer_html(eng) -> str:
+def _viewer_html(eng, document_name: str = "") -> str:
     asr = compute_asr(eng.attempts)
     overall = asr["__overall__"]
     rows = coverage(eng.attempts, eng.exclusions)
 
+    meta = (f"{_esc(eng.client)} · {_esc(eng.start)} → {_esc(eng.end)} · "
+            f"{len(eng.attempts)} attempts · {len(eng.findings)} findings · "
+            f"testers {_esc(', '.join(eng.testers))}")
+    if not eng.attempts and not eng.findings:
+        # Nex state layer (PLAN-UI-NEX): an empty document is an instruction first; the
+        # character is garnish on a working state. Findings/evidence sections stay a
+        # character-free zone - which is why this is the only state that renders one.
+        doc = document_name or "engagement.json"
+        return page(f"Kessler · {eng.ref}", _VIEWER_CSS, "".join([
+            masthead(eng.ref, [meta], "view · localhost only"),
+            nex_state("peek", line="nothing recorded in this document yet.",
+                      command=f"kessler run <scope.json> --out {doc}", note=True)]))
+
     # ---- headline
     body = [
-        masthead(eng.ref,
-                 [f"{_esc(eng.client)} · {_esc(eng.start)} → {_esc(eng.end)} · "
-                  f"{len(eng.attempts)} attempts · {len(eng.findings)} findings · "
-                  f"testers {_esc(', '.join(eng.testers))}"],
-                 "view · localhost only"),
+        masthead(eng.ref, [meta], "view · localhost only"),
         '<section class="card" id="headline">',
         "<div class='label'>overall ASR</div>",
         f"<div class='big'>{_pct(overall['asr'])}</div>",
@@ -145,6 +154,7 @@ def _viewer_html(eng) -> str:
 
 class _Handler(BaseHTTPRequestHandler):
     engagement = None  # injected by serve()
+    document_name = ""  # injected by serve() (the empty state prints the run command)
 
     def log_message(self, fmt, *args):  # silence the default request spam
         pass
@@ -175,7 +185,7 @@ class _Handler(BaseHTTPRequestHandler):
             return
         parsed = urlparse(self.path)
         if parsed.path in ("/", "/index.html"):
-            page = _viewer_html(self.engagement)
+            page = _viewer_html(self.engagement, self.document_name)
             self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
             return
         if parsed.path == "/api/asr":
@@ -198,7 +208,8 @@ class _Handler(BaseHTTPRequestHandler):
 def serve(document: Path, port: int = 8642, open_browser: bool = True) -> None:
     """Serve the viewer for one engagement document. Blocks; Ctrl-C to stop. 127.0.0.1 ONLY."""
     eng = parse(json.loads(Path(document).read_text(encoding="utf-8")))
-    handler = type("BoundHandler", (_Handler,), {"engagement": eng})
+    handler = type("BoundHandler", (_Handler,), {"engagement": eng,
+                                               "document_name": Path(document).name})
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     url = f"http://127.0.0.1:{port}/"
     print(f"VIEWER  {url}  (localhost only · engagement evidence never leaves this machine)")

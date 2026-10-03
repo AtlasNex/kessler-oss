@@ -55,6 +55,18 @@ A low ASR is "the defences held under this corpus, at this N, on this date" — 
 attackers, never a ceiling. The compliance bundle attests to **testing performed**, never that a
 system meets a framework.
 
+## The character
+
+Kessler's day job is measurement, so the character stays out of it: **Nex** appears only in
+wait channels, empty states and playground surfaces, never next to a number, a finding or a
+verdict. One pose ships with this repository, for the verify moment at
+[kessler.atlasnex.com/verify](https://kessler.atlasnex.com/verify):
+
+<img src="assets/nex/nex-hello-kessler.svg" width="96" height="96" alt="Nex, the AtlasNex character, waving">
+
+The marks around that character are **not** part of the Apache-2.0 grant; read
+[TRADEMARKS.md](TRADEMARKS.md) before forking (one minute, no surprises).
+
 ## Licence
 
 Apache-2.0. Attack-behaviour packs under `datasets/behaviors/` carry their own upstream licences

@@ -47,6 +47,7 @@ from .scope import load_scope
 from .selftest import TargetUnreachable
 from . import bundle as bundle_mod
 from . import gate as gate_mod
+from . import nex
 
 
 # --------------------------------------------------------------------------- target drivers
@@ -310,7 +311,12 @@ def cmd_plan(args) -> int:
         print(f"  {cid}: {by_cat.get(cid, 0)} technique(s){marker}")
     unit, count = "techniques", len(techniques)
     if not getattr(args, "techniques_only", False):
-        cases, _, behaviors = build(args.dataset, getattr(args, "behaviors", None))
+        wait = nex.wait_channel("plan", args=args)
+        wait.start()
+        try:
+            cases, _, behaviors = build(args.dataset, getattr(args, "behaviors", None))
+        finally:
+            wait.stop()
         cases = [c for c in cases if c.category not in excluded]
         if getattr(args, "automated_only", False):
             # The preregistered subset (PLAN-v5 2.3): ONLY automated-oracle techniques can
@@ -512,6 +518,11 @@ def cmd_run(args) -> int:
     else:
         targets_run, skipped = list(targets), []
 
+    # The wait channel (PLAN-UI-NEX): opens with the planning phase and covers the
+    # lanes; every gate lives in kessler/nex.py. Gated off => zero bytes anywhere.
+    wait = nex.wait_channel("run", args=args)
+    wait.start()
+
     # Jobs: (kind, target, unit) in deterministic submission order.
     jobs: list[tuple[str, dict, object]] = []
     if not getattr(args, "techniques_only", False):
@@ -552,6 +563,7 @@ def cmd_run(args) -> int:
                 jobs.append(("technique", target, t))
 
     if not jobs:
+        wait.stop()
         print("REFUSED: every in-scope category is excluded — there is nothing to test. A scope "
               "that excludes all ten categories is a scope problem, not a run.", file=sys.stderr)
         return 2
@@ -567,15 +579,23 @@ def cmd_run(args) -> int:
 
     lanes = max(1, int(getattr(args, "lanes", 1) or 1))
     started = time.monotonic()
-    if lanes == 1 or len(jobs) == 1:
-        outcomes = [_job(j) for j in jobs]
-    else:
-        from concurrent.futures import ThreadPoolExecutor  # stdlib; C-2 intact
-        outcomes: list[DriverOutcome | None] = [None] * len(jobs)
-        with ThreadPoolExecutor(max_workers=lanes) as pool:
-            futures = {pool.submit(_job, j): i for i, j in enumerate(jobs)}
-            for fut, i in futures.items():
-                outcomes[i] = fut.result()
+    wait.set_total(len(jobs))
+    try:
+        if lanes == 1 or len(jobs) == 1:
+            outcomes = []
+            for j in jobs:
+                outcomes.append(_job(j))
+                wait.tick()
+        else:
+            from concurrent.futures import ThreadPoolExecutor  # stdlib; C-2 intact
+            outcomes: list[DriverOutcome | None] = [None] * len(jobs)
+            with ThreadPoolExecutor(max_workers=lanes) as pool:
+                futures = {pool.submit(_job, j): i for i, j in enumerate(jobs)}
+                for fut, i in futures.items():
+                    outcomes[i] = fut.result()
+                    wait.tick()
+    finally:
+        wait.stop()
     elapsed = time.monotonic() - started
 
     attempts = [o.attempt for o in outcomes if o.attempt is not None]
@@ -606,6 +626,7 @@ def cmd_run(args) -> int:
         eng.exclusions[cid] = reason
     save(eng, out)
     done = sum(1 for a in attempts if a.succeeded)
+    wait.finish(succeeded=done, recorded=len(attempts), elapsed=elapsed)
     print(f"RECORDED  {len(attempts)} attempt(s) across {len(targets_run)} target(s) "
           f"in {elapsed:.1f}s ({lanes} lane(s)); {done} succeeded; "
           f"{len(attempts) - done} defences held / not achieved.")
@@ -1172,6 +1193,8 @@ def cmd_bench(args) -> int:
         return 2
     from .capsule import canonical_corpus_hash
     from datetime import date
+    wait = nex.wait_channel("bench", args=args)
+    wait.start()
     try:
         unit = bench.register_unit(ref=args.ref, target_kind=args.target_kind,
                                    authorization=auth, engagement=eng,
@@ -1180,6 +1203,8 @@ def cmd_bench(args) -> int:
     except ValueError as exc:
         print(f"REFUSED (bench scope law): {exc}", file=sys.stderr)
         return 2
+    finally:
+        wait.stop()
     if reg_path.exists():
         reg = bench.load_register(reg_path)
         if any(u["ref"] == unit["ref"] for u in reg["units"]):
@@ -1268,15 +1293,20 @@ def cmd_drill(args) -> int:
             print(f"REFUSED: cannot load --targets: {exc}", file=sys.stderr)
             return 2
         findings = []
-    plan = drill.plan_drill(targets, findings, max_chains=args.max_chains)
-    score = None
-    if args.runs:
-        try:
-            runs = json.loads(Path(args.runs).read_text(encoding="utf-8"))
-            score = drill.score_drill(runs)
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
-            print(f"REFUSED: cannot score the runs file: {exc}", file=sys.stderr)
-            return 2
+    wait = nex.wait_channel("drill", args=args)
+    wait.start()
+    try:
+        plan = drill.plan_drill(targets, findings, max_chains=args.max_chains)
+        score = None
+        if args.runs:
+            try:
+                runs = json.loads(Path(args.runs).read_text(encoding="utf-8"))
+                score = drill.score_drill(runs)
+            except (OSError, json.JSONDecodeError, ValueError) as exc:
+                print(f"REFUSED: cannot score the runs file: {exc}", file=sys.stderr)
+                return 2
+    finally:
+        wait.stop()
     text = drill.render_drill_md(plan, score, topology_name=args.name)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
@@ -1412,6 +1442,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--automated-only", action="store_true", dest="automated_only",
                     help="preview only cases whose technique carries an automated effect "
                          "oracle (the preregistered subset; matches `run --automated-only`)")
+    sp.add_argument("--no-nex", action="store_true", dest="no_nex",
+                    help="disable the Nex wait-channel art (same as NO_NEX=1)")
     sp.set_defaults(fn=cmd_plan)
 
     sp = sub.add_parser("run", help="execute the plan and record the engagement document")
@@ -1442,6 +1474,8 @@ def build_parser() -> argparse.ArgumentParser:
                          "(the preregistered baseline/Open-Bench subset, PLAN-v5 section 2.3: "
                          "a cell publishes only automated-oracle attempts)")
     sp.add_argument("--behaviors", help="behaviour-pack directory override")
+    sp.add_argument("--no-nex", action="store_true", dest="no_nex",
+                    help="disable the Nex wait-channel art (same as NO_NEX=1)")
     sp.set_defaults(fn=cmd_run)
 
     sp = sub.add_parser("synth", help="synthesize a per-target behaviour pack from a target "
@@ -1610,6 +1644,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="corpus pin (default: recompute)")
     sp.add_argument("--measured", default="", help="measurement date (default: today)")
     sp.add_argument("--list", action="store_true", help="render the register, add nothing")
+    sp.add_argument("--no-nex", action="store_true", dest="no_nex",
+                    help="disable the Nex wait-channel art (same as NO_NEX=1)")
     sp.set_defaults(fn=cmd_bench)
 
     sp = sub.add_parser("aiuc", help="AIUC-1 quarterly evidence pack (PLAN-v5 #24): findings "
@@ -1646,6 +1682,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="chains in the attempt plan (default 5)")
     sp.add_argument("--name", default="", help="topology name printed on the artifact")
     sp.add_argument("--out", help="write the markdown here (default: stdout)")
+    sp.add_argument("--no-nex", action="store_true", dest="no_nex",
+                    help="disable the Nex wait-channel art (same as NO_NEX=1)")
     sp.set_defaults(fn=cmd_drill)
 
     sp = sub.add_parser("memory-score", help="score an engagement's memory-pack attempts into "

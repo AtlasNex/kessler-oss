@@ -36,7 +36,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from .html_report import _esc
-from .ui import masthead, page
+from .ui import masthead, nex_state, page
 
 VERDICTS = ("hit", "refused", "unsure", "skip")
 _NOTE_CAP = 2000
@@ -366,10 +366,38 @@ counts();refreshProgress();
 
 
 def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
-                    decided: int, expected: int) -> str:
-    cand = "".join(_row_card(r) for r in rows["candidates"])
-    pending = "".join(_row_card(r) for r in rows["pending"])
+                    decided: int, expected: int, document_name: str = "") -> str:
     scored = "".join(_row_card(r) for r in rows["scored"])
+    decidable = len(rows["candidates"]) + len(rows["pending"])
+    # The Nex state layer (PLAN-UI-NEX): the character renders ONLY where no decidable row
+    # is being read - a first-run bench, or a bench whose rows are all decided. The rows
+    # themselves (and the scored attempts) stay a character-free zone: the reviewer there
+    # is verifying Kessler, not meeting a mascot.
+    if decidable == 0 and not rows["scored"]:
+        zone = nex_state(
+            "peek",
+            line="nothing on the bench yet; the first run brings the first rows.",
+            command=(f'kessler run <scope.json> --out {document_name or "engagement.json"} '
+                     f'--reviewer "{reviewer or "Your Name"}"'),
+            note=True)
+    elif decidable == 0:
+        zone = (nex_state(
+                    "verified",
+                    line="nothing left to decide in this document; the scored attempts "
+                         "below are read-only evidence.")
+                if decided else
+                "<p class='kv'>no decidable row in this document; the attempts below are "
+                "read-only evidence.</p>")
+    else:
+        cand = "".join(_row_card(r) for r in rows["candidates"])
+        pending = "".join(_row_card(r) for r in rows["pending"])
+        zone = (
+            f"<h2 id='cand'>triage candidates <span class='n'>{len(rows['candidates'])}</span>"
+            f"</h2><p class='kv'>Ranked by the judge — read the rationale, then the reply, then "
+            f"decide. These rows are the whole point of the human half.</p>{cand}"
+            f"<h2 id='pend'>remaining pending rows <span class='n'>{len(rows['pending'])}</span>"
+            f"</h2><p class='kv'>Not flagged by the judge — still undecided; give them the same "
+            f"read.</p>{pending}")
     body = (
         masthead(f"review · {_esc(engagement)}",
                  [f"human half · localhost only · reviewer "
@@ -387,12 +415,7 @@ def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
         "<span class='counts'><span id='c-hit'></span><span id='c-refused'></span>"
         "<span id='c-unsure'></span><span id='c-skip'></span></span></div>",
         "</div>",
-        f"<h2 id='cand'>triage candidates <span class='n'>{len(rows['candidates'])}</span>"
-        f"</h2><p class='kv'>Ranked by the judge — read the rationale, then the reply, then "
-        f"decide. These rows are the whole point of the human half.</p>{cand}",
-        f"<h2 id='pend'>remaining pending rows <span class='n'>{len(rows['pending'])}</span>"
-        f"</h2><p class='kv'>Not flagged by the judge — still undecided; give them the same "
-        f"read.</p>{pending}",
+        zone,
         f"<details class='scored-zone'><summary>already-scored attempts "
         f"({len(rows['scored'])}, read-only)</summary>{scored}</details>",
         "<p class='kbd-hint'>verdicts write "
@@ -416,6 +439,7 @@ class _ReviewHandler(BaseHTTPRequestHandler):
     rows = {}
     store_path = None
     expected = 0
+    document_name = ""
 
     def log_message(self, fmt, *args):
         pass
@@ -442,7 +466,7 @@ class _ReviewHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
             page = _workbench_html(self.engagement, self.rows, self.token, self.reviewer,
-                                   self._decided(), self.expected)
+                                   self._decided(), self.expected, self.document_name)
             self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
             return
         if path == "/api/progress":
@@ -525,6 +549,7 @@ def serve(document: Path, port: int = 8643, reviewer: str = "", open_browser: bo
         "rows": rows,
         "store_path": store_path,
         "expected": expected,
+        "document_name": document.name,
     })
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     url = f"http://127.0.0.1:{port}/"

@@ -17,11 +17,21 @@ Design rules (D-022 lineage, evolved):
   a lie about precision — the ASR viz draws the 95% band explicitly;
 * motion respects prefers-reduced-motion; nothing here is load-bearing for meaning (color is
   always accompanied by a text label — the severity badge says the word).
+* the Nex state layer (session 31, PLAN-UI-NEX): the character appears only where the
+  reader already trusts Kessler - empty and loading states, wait channels, the
+  scoreboard - and never beside a finding, number, verdict or evidence block;
+  nex_state() is the only renderer, one sticky note per view is enforced in page(),
+  and the report renders zero `nex-` references (pinned in the suite);
 * pure CSS/HTML: no JS requirement (progressive enhancement only), C-2 stdlib-safe.
 """
 from __future__ import annotations
 
+import base64
+import itertools
+import json
+import re
 from html import escape as _html_escape
+from pathlib import Path
 
 #: Brand palette (D-022): Kessler amber on terminal black. Single source of truth.
 TOKENS = """
@@ -223,6 +233,40 @@ nav.toc a.active::before { content: "▸ "; }
 }
 """
 
+#: Nex chrome, shipped ONLY on pages whose body renders a Nex element (page() checks).
+#: The client report therefore carries zero `nex-` bytes - the tier-0 pin reads it.
+NEX_CSS = """:root {
+  /* Nex (session 31): a color is a voice. Amber = measurement; this violet = the
+     companion, reserved for Nex moments (glow, accents, focus rings). Pairs ship
+     together: ink ON a violet fill is the on-beacon ink, never starlight (which
+     fails contrast). These tokens travel only with pages that render the character. */
+  --nex-beacon: #8B7CF6; --nex-on-beacon: #0b0d10;
+  --note-yellow: #FFD85A; --pen-blue: #1E3A8A;
+}
+/* ---- Nex, the state layer (session 31) ----
+   The character appears where the reader already trusts Kessler (empty states, wait
+   channels, the scoreboard) and NEVER beside a finding, number, verdict or evidence
+   block. One note per view (enforced in page()); no animation, so there is no
+   motion to gate - the prefers-reduced-motion rule below is a standing guard. */
+.nex { display: flex; align-items: center; gap: .9rem; margin: 1.4rem 0; }
+.nex-art { width: 72px; height: 72px; flex: 0 0 auto; }
+.nex-art.big { width: 108px; height: 108px; }
+.nex-body { min-width: 0; }
+.nex-line { color: var(--dim); font-size: .84rem; font-family: var(--mono); }
+.nex-empty { border: 1px dashed var(--border2); border-radius: var(--radius);
+  background: var(--bg2); padding: 1.1rem 1.3rem; }
+.nex-cmd { margin: .45rem 0 .2rem; }
+.nex-note { display: inline-block; background: var(--note-yellow); color: var(--pen-blue);
+  font-family: 'Kalam', 'Segoe Script', cursive; font-weight: 700; font-size: .95rem;
+  line-height: 1.3; padding: .5rem .8rem; border-radius: 6px; transform: rotate(-1.5deg);
+  box-shadow: 0 8px 20px rgba(0,0,0,.28); margin-top: .5rem; }
+.nex-sign { opacity: .75; }
+@media (prefers-reduced-motion: reduce) {
+  .nex-art, .nex-note { animation: none; transition: none; }
+}
+@media print { .nex, .nex-note { display: none; } }
+"""
+
 
 def _esc(text: str) -> str:
     # Control characters (except tab/newline/CR) are stripped BEFORE escaping: a NUL or ESC byte
@@ -303,12 +347,121 @@ def masthead(title: str, meta_lines: list[str], command: str) -> str:
 
 def page(title: str, head_extra: str, body: str) -> str:
     """Full document frame used by report + viewer + workbench."""
+    # Nex law, mechanical: one sticky note per view. A second note is refused HERE (the
+    # page is the view), so no surface can stack whimsy by accident.
+    if body.count('class="nex-note"') > 1:
+        raise ValueError("one sticky note per view (Nex enforcement, PLAN-UI-NEX)")
+    css = CSS + (NEX_CSS if 'class="nex' in body else "")
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{_esc(title)}</title>"
-        f"<style>{CSS}</style>{head_extra}</head>"
+        f"<style>{css}</style>{head_extra}</head>"
         '<body><div class="grid-bg"></div><main>'
         f"{body}"
         "</main></body></html>"
     )
+
+# --------------------------------------------------------------------------- Nex state layer
+
+#: Nex is the STATE layer of the harness (PLAN-UI-NEX, session 31): the character appears
+#: where the reader already trusts Kessler (empty states, wait channels, the scoreboard,
+#: the marketing site) and NEVER beside a finding, number, verdict, interval or evidence
+#: block. Enforcement is mechanical: nex_art() is the only renderer, page() refuses a
+#: second sticky note, voice_guard() refuses first-person copy, and the suite pins the
+#: report to zero `nex-` references.
+
+#: Vendored brand-kit art (digest-pinned by tests/test_nex.py). The kit is the master; a
+#: tree without the assets (the OSS kernel strips the character) degrades every Nex
+#: surface to its text, never to a broken image.
+NEX_ROOT = Path(__file__).resolve().parent.parent / "assets" / "nex"
+
+#: Note pools: observational voice only (voice_guard below; the suite pins every pool to
+#: it). Round-robin rotation - a pool exists so one string never lands twice in a row.
+NEX_NOTES: dict[str, tuple[str, ...]] = {
+    "empty": (
+        "nothing on the bench yet; the first run brings the first rows.",
+        "the bench fills when a run lands - this page is the reading room after.",
+        "no rows to read yet; the command above starts the work.",
+    ),
+}
+
+_VOICE_RE = re.compile(
+    r"\b(?:I|I'm|I've|I'll|I'd|me|my|mine|we|we're|we've|we'll|us|our|ours)\b",
+    re.IGNORECASE,
+)
+_NOTE_ROTATION = itertools.count()
+_NEX_FILES: dict[tuple[str, str], str] = {}
+_NEX_B64: dict[tuple[str, str], str] = {}
+
+
+def voice_guard(text: str) -> str:
+    """Nex never speaks in first person on anything factual (CHI 2024): raise, never ship."""
+    m = _VOICE_RE.search(str(text).replace("\u2019", "'"))
+    if m:
+        raise ValueError(f"Nex note voice: first-person {m.group(0)!r} in {text!r} "
+                         "(observational only)")
+    return text
+
+
+def _nex_manifest() -> dict[tuple[str, str], str]:
+    """pose+variant -> vendored path, from the digest-pinned manifest (read once per process)."""
+    if not _NEX_FILES:
+        try:
+            manifest = json.loads((NEX_ROOT / "manifest.json").read_text(encoding="utf-8"))
+            for f in manifest.get("files", []):
+                _NEX_FILES[(f["pose"], f["variant"])] = f["path"]
+        except (OSError, ValueError, KeyError):
+            pass
+    return _NEX_FILES
+
+
+def nex_art(pose: str, variant: str = "dark", cls: str = "") -> str:
+    """The ONLY way Nex renders: one vendored kit pose, inlined as a data URI so the
+    single-file surfaces stay offline and C-2. Empty string when the pose is not vendored."""
+    key = (pose, variant)
+    if key not in _NEX_B64:
+        rel = _nex_manifest().get(key, "")
+        try:
+            data = (NEX_ROOT / rel).read_bytes() if rel else b""
+        except OSError:
+            data = b""
+        _NEX_B64[key] = base64.b64encode(data).decode("ascii") if data else ""
+    if not _NEX_B64[key]:
+        return ""
+    cls = f"nex-art {cls}".strip()
+    return (f'<img class="{cls}" src="data:image/svg+xml;base64,{_NEX_B64[key]}" '
+            f'alt="" aria-hidden="true">')
+
+
+def nex_note(text: str | None = None, pool: str = "empty") -> str:
+    """One sticky note (Kalam on yellow, pen-blue ink, signed - N). Voice-guarded; the
+    page() check keeps it to one per view."""
+    if text is None:
+        if pool not in NEX_NOTES:
+            raise ValueError(f"unknown Nex note pool {pool!r}")
+        text = NEX_NOTES[pool][next(_NOTE_ROTATION) % len(NEX_NOTES[pool])]
+    voice_guard(text)
+    return (f'<span class="nex-note">{_esc(text)} '
+            f'<span class="nex-sign">- N</span></span>')
+
+
+def nex_state(pose: str, *, variant: str = "dark", line: str = "", command: str = "",
+              note: str | bool | None = None, big: bool = False) -> str:
+    """The Nex state block: [art] + [state line] + [exact command] + [one note].
+
+    Call sites: empty states (pose 'peek' + the exact run command), completion states
+    (pose 'verified'). Never called from the report, findings, evidence or SARIF paths.
+    """
+    art = nex_art(pose, variant, cls="big" if (big or command) else "")
+    right: list[str] = []
+    if line:
+        right.append(f'<div class="nex-line">{_esc(line)}</div>')
+    if command:
+        right.append(f'<pre class="nex-cmd">{_esc(command)}</pre>')
+    if note is not None:
+        right.append(nex_note(text=note) if isinstance(note, str) else nex_note())
+    if not art and not right:
+        return ""
+    cls = "nex nex-empty" if command else "nex"
+    return f'<div class="{cls}">{art}<div class="nex-body">{"".join(right)}</div></div>'
