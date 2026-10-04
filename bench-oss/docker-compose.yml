@@ -56,7 +56,25 @@ services:
     volumes:
       - ./litellm-config.yaml:/app/config.yaml:ro
 
+  # BENCH-OSS-04: the fourth estate shape - the raw local model runtime (no UI/RAG/gateway).
+  # GPU note: this host has no GPU; the CPU build runs qwen2.5:7b-instruct (~4.7GB weights,
+  # a few GB RAM at inference) slowly but deterministically enough for the bench (4 lanes,
+  # generous per-attempt timeout in the kernel driver). Keep 8GB+ free RAM when running.
+  ollama:
+    image: docker.io/ollama/ollama@sha256:292ee7945dfc3d5840a181f3ab86fedb1e66703e02c8af98b50f4da56b7e278c
+    container_name: bench-ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8104:11434"
+    environment:
+      OLLAMA_API_KEY: ${OLLAMA_KEY}
+      OLLAMA_KEEP_ALIVE: 30m
+      OLLAMA_NUM_PARALLEL: 4
+    volumes:
+      - ollama-models:/root/.ollama
+
 volumes:
   openwebui-data:
   anythingllm-data:
   anythingllm-hot:
+  ollama-models:

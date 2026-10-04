@@ -396,6 +396,35 @@ def cmd_review(args) -> int:
     return 0
 
 
+def cmd_demo_review(args) -> int:
+    """T-2: the read-only demo workbench over the sample engagement (writes nothing)."""
+    from .review import serve
+    doc = Path(args.document) if args.document else (
+        Path(__file__).resolve().parent.parent / "run-selftest" / "a7-engagement.json")
+    if not doc.exists():
+        print(f"REFUSED: sample engagement not found: {doc}", file=sys.stderr)
+        return 2
+    print("demo mode: verdicts write NOTHING; tour tips on")
+    serve(doc, port=args.port, reviewer=args.tester or "demo visitor",
+          open_browser=not args.no_browser, demo=True, tips=True)
+    return 0
+
+
+def cmd_briefing(args) -> int:
+    """A8/C4: compose a briefing DRAFT from the practice's own artifacts (never sends)."""
+    from . import briefing
+    try:
+        text = briefing.compose(since=args.since, until=args.until)
+    except (OSError, ValueError) as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    out = Path(args.out) if args.out else Path("out") / f"briefing-{args.since}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8")
+    print(f"WROTE  {out}  ({len(text)} chars; DRAFT - a human reviews before anything ships)")
+    return 0
+
+
 def cmd_corpus(args) -> int:
     """Print the composed corpus census (D-026 rule 3: the count is printed, never claimed)."""
     cases, techniques, behaviors = build(args.dataset, args.behaviors)
@@ -493,7 +522,9 @@ def cmd_run(args) -> int:
               "(a report that cannot say who did the work is unusable as evidence). Pass "
               "--tester \"Your Name\" or add a testers list to the scope file.", file=sys.stderr)
         return 2
-    driver = DRIVERS[args.driver]({t.id: t for t in techniques})
+    # only the live driver takes a read timeout; the echo driver is offline and clock-free
+    driver_kwargs = {"timeout": getattr(args, "http_timeout", 60)} if args.driver == "http" else {}
+    driver = DRIVERS[args.driver]({t.id: t for t in techniques}, **driver_kwargs)
 
     # A category the scope EXCLUDES must not be attempted. Two reasons, both hard: sending traffic
     # for an out-of-scope category is testing outside the signed scope (AGENTS.md), and an attempt
@@ -1453,6 +1484,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="target driver: echo = offline deterministic (default); http = LIVE "
                          "OpenAI-compatible endpoint (KESSLER_TARGET_URL + Bearer "
                          "KESSLER_TARGET_API_KEY via env, never logged)")
+    sp.add_argument("--http-timeout", type=int, default=60, dest="http_timeout",
+                    help="per-request read timeout in seconds for the http driver (default 60; "
+                         "raise it for slow targets such as CPU-served local model runtimes)")
     sp.add_argument("--lanes", type=int, default=1,
                     help="parallel request lanes for the live driver (1 = serial; the "
                          "RECORDED set is identical at any lane count — only wall-clock "
@@ -1496,6 +1530,23 @@ def build_parser() -> argparse.ArgumentParser:
                     help="who is reading (recorded on every verdict)")
     sp.add_argument("--no-browser", action="store_true")
     sp.set_defaults(fn=cmd_review)
+
+    sp = sub.add_parser("demo", help="read-only demo surfaces (writes nothing)")
+    dsp = sp.add_subparsers(dest="demo_cmd")
+    dr = dsp.add_parser("review", help="boot the sample engagement in the review workbench, "
+                                       "read-only, with tour tips (T-2)")
+    dr.add_argument("--document", help="engagement JSON (default: the sealed A7 self-test)")
+    dr.add_argument("--port", type=int, default=8643)
+    dr.add_argument("--tester", dest="tester", default="", help="display name (recorded nowhere)")
+    dr.add_argument("--no-browser", action="store_true")
+    dr.set_defaults(fn=cmd_demo_review)
+
+    sp = sub.add_parser("briefing", help="compose a briefing DRAFT from the practice's own "
+                                         "artifacts (A8/C4; never sends)")
+    sp.add_argument("--since", required=True, help="window start, YYYY-MM-DD")
+    sp.add_argument("--until", help="window end (default: today)")
+    sp.add_argument("--out", help="output path (default: out/briefing-<since>.md)")
+    sp.set_defaults(fn=cmd_briefing)
 
     sp = sub.add_parser("corpus", help="compose and count the v2 test-case corpus (D-026)")
     sp.add_argument("--dataset", help="datasets directory override")

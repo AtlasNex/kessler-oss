@@ -198,6 +198,9 @@ def render_html_report(engagement) -> str:
              f"<td class='num'><b>{_pct(overall['asr'])}</b></td>"
              f"<td><b>{_interval(overall)}</b></td><td class='sep-center'>—</td>"
              f"<td>{_asr_bar(overall)}</td></tr>")
+    o.append("<div class='kv' style='margin-top:.4rem'>A 0% row over its N is a "
+             "measurement, not a guarantee: read the interval\u2019s upper bound at that "
+             "N.</div>")
     o.append("</table></section>")
 
     # ---- 05 findings (the case files)

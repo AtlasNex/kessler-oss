@@ -366,8 +366,16 @@ counts();refreshProgress();
 
 
 def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
-                    decided: int, expected: int, document_name: str = "") -> str:
+                    decided: int, expected: int, document_name: str = "",
+                    demo: bool = False, tips: bool = False) -> str:
     scored = "".join(_row_card(r) for r in rows["scored"])
+    demo_head = ""
+    if demo:
+        tipset = ("read the rationale first, then the reply, then decide; keys 1-4 cast "
+                  "verdicts; o opens a row; the clock measures the read."
+                  if tips else "verdicts here change nothing anywhere.")
+        demo_head = ("<div class='demo-banner'><b>DEMO - this desk writes nothing.</b> "
+                     "Every button works; no file is written. Tour: " + tipset + "</div>")
     decidable = len(rows["candidates"]) + len(rows["pending"])
     # The Nex state layer (PLAN-UI-NEX): the character renders ONLY where no decidable row
     # is being read - a first-run bench, or a bench whose rows are all decided. The rows
@@ -399,6 +407,7 @@ def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
             f"</h2><p class='kv'>Not flagged by the judge — still undecided; give them the same "
             f"read.</p>{pending}")
     body = (
+        demo_head,
         masthead(f"review · {_esc(engagement)}",
                  [f"human half · localhost only · reviewer "
                   f"{_esc(reviewer or '(set --reviewer)')}"],
@@ -418,16 +427,22 @@ def _workbench_html(engagement: str, rows: dict, token: str, reviewer: str,
         zone,
         f"<details class='scored-zone'><summary>already-scored attempts "
         f"({len(rows['scored'])}, read-only)</summary>{scored}</details>",
-        "<p class='kbd-hint'>verdicts write "
-        "<code>&lt;doc&gt;-human-review.json</code> beside the document; nothing here touches "
-        "the engagement file or the sidecar.</p>",
+        ("<p class='kbd-hint'>DEMO: verdicts write nothing; the real workbench writes "
+         "<code>&lt;doc&gt;-human-review.json</code> beside the document (never the engagement "
+         "file or the sidecar).</p>" if demo else
+         "<p class='kbd-hint'>verdicts write "
+         "<code>&lt;doc&gt;-human-review.json</code> beside the document; nothing here touches "
+         "the engagement file or the sidecar.</p>"),
         _WORKBENCH_JS.replace("@@TOKEN@@", json.dumps(token).replace("<", "\\u003c"))
                      .replace("@@ENGJSON@@", json.dumps(engagement).replace("<", "\\u003c")),
     )
     return page(f"Kessler review · {engagement}",
                 _WORKBENCH_CSS + "\n<style>"
                 ".scored-zone { margin-top: 2.5rem; } .scored-zone > summary { font-size: .9rem; }"
-                "h2 .n { color: var(--muted); font-weight: 400; }</style>",
+                "h2 .n { color: var(--muted); font-weight: 400; }"
+                ".demo-banner { border: 1px solid var(--amber); border-radius: var(--radius);"
+                " background: var(--amber-dim); padding: .7rem .9rem; margin-bottom: 1.2rem;"
+                " font-family: var(--mono); font-size: .82rem; }</style>",
                 "".join(body).replace("@@DECIDED@@", str(decided))
                              .replace("@@EXPECTED@@", str(expected)))
 
@@ -440,6 +455,8 @@ class _ReviewHandler(BaseHTTPRequestHandler):
     store_path = None
     expected = 0
     document_name = ""
+    demo = False
+    tips = False
 
     def log_message(self, fmt, *args):
         pass
@@ -466,7 +483,8 @@ class _ReviewHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
             page = _workbench_html(self.engagement, self.rows, self.token, self.reviewer,
-                                   self._decided(), self.expected, self.document_name)
+                                   self._decided(), self.expected, self.document_name,
+                                   self.demo, self.tips)
             self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
             return
         if path == "/api/progress":
@@ -512,6 +530,14 @@ class _ReviewHandler(BaseHTTPRequestHandler):
             self._send(400, "text/plain; charset=utf-8", b"malformed json\n")
             return
         path = urlparse(self.path).path
+        if self.demo and path in ("/api/verdict", "/api/finish"):
+            # T-2: the demo desk writes NOTHING. The response keeps the UI honest: the same
+            # shape the real endpoint would return, plus wrote=false.
+            self._send(200, _JSON_CT, json.dumps(
+                {"demo": True, "wrote": False,
+                 "note": "demo mode: this desk writes nothing; the real workbench persists "
+                         "verdicts to <doc>-human-review.json"}).encode("utf-8"))
+            return
         try:
             if path == "/api/verdict":
                 entry = record_decision(self.store_path, self.engagement, self.reviewer, body)
@@ -528,7 +554,8 @@ class _ReviewHandler(BaseHTTPRequestHandler):
         self._send(404, "text/plain; charset=utf-8", b"not found\n")
 
 
-def serve(document: Path, port: int = 8643, reviewer: str = "", open_browser: bool = True) -> None:
+def serve(document: Path, port: int = 8643, reviewer: str = "", open_browser: bool = True,
+          demo: bool = False, tips: bool = False) -> None:
     """Serve the review workbench for one engagement document. Blocks; Ctrl-C to stop."""
     document = Path(document)
     doc = json.loads(document.read_text(encoding="utf-8"))
@@ -550,6 +577,8 @@ def serve(document: Path, port: int = 8643, reviewer: str = "", open_browser: bo
         "store_path": store_path,
         "expected": expected,
         "document_name": document.name,
+        "demo": demo,
+        "tips": tips,
     })
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
     url = f"http://127.0.0.1:{port}/"

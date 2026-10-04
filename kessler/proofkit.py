@@ -424,7 +424,8 @@ VEC_V10: tuple[tuple[str, str, str], ...] = (
      "one engagement document; regenerating any artefact is a re-run, not a rewrite"),
     ("Tool-call replay / agent-trace logging", "PARTIAL",
      "transcripts ride verbatim in attempt evidence and are hash-chained by the capsule; a "
-     "per-finding replay bundle is on the roadmap"),
+     "per-finding replay bundle is on the roadmap; MCP capability tracing via the drift "
+     "radar"),
     ("Raw evidence supports all claims", "YES",
      "the evidence block IS the claim's source text"),
     ("Tester-action vs model-behaviour separation", "YES",
@@ -447,6 +448,42 @@ VEC_V10: tuple[tuple[str, str, str], ...] = (
     ("Certification claims", "N/A",
      "no accredited body certifies against ASI01-ASI10; we map, never certify — stated on "
      "every artefact"),
+    ("Custom adversarial testing (novel findings, not recycled jailbreaks)", "YES",
+     "first-party corpus of composed cases plus per-target behaviour synthesis; the licence "
+     "gate blocks verbatim third-party reuse and every case cites its source"),
+    ("Multi-turn and stateful evaluation (memory, long-lived sessions)", "YES",
+     "multi-turn runs are conducted sequences, one attempt per sequence with the transcript "
+     "as evidence; the memory pack measures write/retrieve/trigger poisoning at L1-L3 with "
+     "rates"),
+    ("Quantitative, risk-tied metrics (pass@k family)", "YES",
+     "attack-success rate over counted attempts is a pass@k-family statistic; every rate "
+     "ships with its 95% Wilson interval and a preregistered N floor"),
+    ("Human verification of critical findings", "YES",
+     "candidate successes are hand-adjudicated before any number ships; refusals that quote "
+     "the injection are excluded by adjudication rules, not by keyword luck"),
+    ("Evaluator calibration (confusion matrix)", "PARTIAL",
+     "the triage judge is calibrated on labelled rows (FP 33% [10%, 70%], FN 0% [0%, 49%]) "
+     "and reported as judge metadata only; a broader oracle confusion matrix is on the "
+     "roadmap"),
+    ("Multi-agent / composed-topology evaluation", "PARTIAL",
+     "the cascade engine measures taint propagation across declared 2-5 node topologies "
+     "(Drill #01: 0 of 4 chains completed, every hop held), not yet a general simulator"),
+    ("Sandbox / containment validation", "PARTIAL",
+     "the containment profile pack measures per-boundary held rates over N runs; it is a "
+     "measurement, not a sandbox product"),
+    ("CI/CD integration and regression gating", "YES",
+     "kessler gate + SARIF and the GitHub Action run the same checks a client CI would; "
+     "regressions are detected against the registered baseline"),
+    ("Deterministic replay and seed control", "YES",
+     "one engagement document; sealed artefacts; kessler verify-capsule recomputes every "
+     "figure; lane counts are explicit (kessler run --lanes N)"),
+    ("Data governance (retention, isolation, on-prem)", "YES",
+     "the kernel is stdlib-only and runs on the client's own machine (C-2); findings never "
+     "leave the client's network except the report; no trackers on any surface"),
+    ("Red-flag posture (stock jailbreaks, opaque scoring, coverage claims)", "YES",
+     "no stock jailbreak libraries (licence gate), no black-box scoring (method published "
+     "and versioned), and no full-coverage claims: coverage prints tested / excluded / "
+     "unsupported"),
 )
 
 

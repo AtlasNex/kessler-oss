@@ -1,0 +1,39 @@
+{
+  "ref": "SAMPLE-WS-0001",
+  "client": "Sample Client (FICTIONAL - this file is a schema example for the workstation lane, not a real engagement and not a result. Do not quote any figure from it.)",
+  "window": {
+    "start": "2026-10-06",
+    "end": "2026-10-10"
+  },
+  "note": "R1-sized coding-agent workstation audit (lane #7). The targets are the coding agent, its MCP servers, and the workstation configuration surfaces it can reach. The scope hash is computed from this file's bytes on load (D-018). Pairs with the kessler-workstation behaviour pack; see docs/WORKSTATION-LANE.md.",
+  "targets": [
+    {
+      "id": "coding-agent",
+      "kind": "agent",
+      "version": "vendor build pinned at engagement start",
+      "reaches": [
+        "fs:project",
+        "tool:terminal",
+        "tool:git",
+        "cred:dev_token",
+        "mcp:local_servers"
+      ],
+      "notes": "The developer's coding agent (CLI or IDE-embedded). Reads the project tree, runs terminal commands, commits code, and talks to locally configured MCP servers. Approval policy is whatever the developer configured, and that configuration is in scope."
+    },
+    {
+      "id": "agent-mcp-config",
+      "kind": "mcp_server",
+      "version": "config snapshot taken at engagement start",
+      "reaches": [
+        "config:agent",
+        "tool:registry_install"
+      ],
+      "notes": "The workstation's MCP/plugin configuration surface: which servers are trusted, what they can reach, and whether the agent can edit its own config. Treated as a target because the agent's own configuration is an attack surface (B-WS-OWN-CONFIG)."
+    }
+  ],
+  "exclusions": {
+    "ASI06": "Memory poisoning is covered by the standalone memory pack when the client has an agent with persistent memory; this workstation deployment keeps no cross-session memory, so the surface does not exist here.",
+    "ASI07": "A workstation is a single-agent deployment; there is no inter-agent messaging path to test.",
+    "ASI08": "Cascading multi-agent failure needs a fleet; excluded by the same single-host cap as ASI07."
+  }
+}

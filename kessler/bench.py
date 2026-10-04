@@ -134,7 +134,11 @@ def render_bench_md(register: dict) -> str:
         rate = f"{u['successes'] / u['n'] * 100:.1f}%" if powered else "—"
         band = (f"[{ci[0] * 100:.1f}%, {ci[1] * 100:.1f}%]" if powered and ci[0] is not None
                 else "—")
-        status = "published" if powered else f"not yet powered (n={u['n']} < {N_FLOOR})"
+        if powered:
+            status = ("published" if u["successes"]
+                      else f"published; 0 observed in n={u['n']} attempts")
+        else:
+            status = f"not yet powered (n={u['n']} < {N_FLOOR})"
         lines.append(f"| {u['ref']} | {u['target_kind']} | {u['corpus_hash'][:12]}… | "
                      f"{u['n']} | {rate} | {band} | {status} |")
     lines += [
@@ -144,5 +148,7 @@ def render_bench_md(register: dict) -> str:
         f"unit re-runs from the open kernel; scope law: own lab, our honeypots, self-hosted "
         f"OSS builds, and written-authorized consented targets - never a third-party hosted "
         f"stack, and maintainer consent to a repo is not consent to attack its instance.",
+        " A zero row reports what was not observed among the attempts run; read the "
+        "interval's upper bound at that n and nothing more.",
     ]
     return "\n".join(lines)

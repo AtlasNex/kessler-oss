@@ -44,9 +44,19 @@ tmp=".env.tmp.$$"
   else
     echo "LITELLM_KEY=sk-kessler-$(openssl rand -hex 24)"
   fi
+  if [ -f .env ] && grep -q '^OLLAMA_KEY=' .env; then
+    grep '^OLLAMA_KEY=' .env
+  else
+    echo "OLLAMA_KEY=sk-kessler-$(openssl rand -hex 24)"
+  fi
 } > "$tmp"
 mv -f "$tmp" .env
 chmod 600 .env
 
 docker compose up -d
+
+# BENCH-OSS-04: ensure the bench model exists (idempotent; ~4.7GB download on first boot only)
+docker compose exec -T ollama ollama list 2>/dev/null | grep -q 'qwen2.5:7b-instruct' || \
+  docker compose exec -T ollama ollama pull qwen2.5:7b-instruct
+
 docker compose ps --format '{{.Name}} {{.Status}}'

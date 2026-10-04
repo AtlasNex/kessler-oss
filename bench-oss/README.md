@@ -18,6 +18,7 @@ the host, detached). Register a finished run:
 | BENCH-OSS-01 | Open WebUI | `ghcr.io/open-webui/open-webui@sha256:8b432fe0a65b91116afc7961365c6cca5379cc923171386a96691f3471f3cae9` | `:8101` `/api/chat/completions` | Open WebUI License (custom, BSD-3-style; GitHub metadata: NOASSERTION) |
 | BENCH-OSS-02 | AnythingLLM | `mintplexlabs/anythingllm@sha256:f26f30df46916b6e953e3a47ca98f48817726e3df635e62d4bfdd133292ecfff` | `:8102` `/api/v1/openai/chat/completions` | MIT |
 | BENCH-OSS-03 | LiteLLM proxy | `ghcr.io/berriai/litellm@sha256:f63fb81b831b170ec16851e23c36ac5bf52ef106b271406429524a2ed730bbfd` | `:8103` `/v1/chat/completions` | MIT outside `enterprise/` (multi-part LICENSE; GitHub chip: NOASSERTION) |
+| BENCH-OSS-04 | Ollama (local model runtime) | `docker.io/ollama/ollama@sha256:292ee7945dfc3d5840a181f3ab86fedb1e66703e02c8af98b50f4da56b7e278c` | `:8104` `/v1/chat/completions` (model qwen2.5:7b-instruct) | MIT (LICENSE text verified 04 Oct 2026); model Apache-2.0 |
 
 Per-target records (deploy notes, authorization reasoning, ToS/law notes) live in
 `targets/` beside this file. The courtesy-notification draft for maintainers lives in

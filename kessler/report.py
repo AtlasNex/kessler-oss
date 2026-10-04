@@ -152,7 +152,9 @@ def _asr_table(engagement) -> str:
         "rate of 0% is a measurement, not a guarantee: the "
         "interval is the honest part of that statement. A category marked *excluded* was contracted "
         "out of scope with a written reason; a category marked **unsupported** was neither tested nor "
-        "excluded, and this report should not have been emitted (see the coverage table)."
+        "excluded, and this report should not have been emitted (see the coverage table). A "
+        "0% row over N attempts is a measurement over that N, not a guarantee: read the "
+        "interval's upper bound at that N."
     )
     if not tested:
         lines.append("\n> No attempts were recorded. This table is empty by construction, not by finding.")
@@ -406,6 +408,8 @@ def render_coverage(engagement) -> str:
         f"**{tested} of {len(rows)}** categories tested; "
         f"**{sum(1 for r in rows if r['status'] == 'excluded')}** excluded with a reason; "
         f"**{sum(1 for r in rows if r['status'] == 'missing')}** missing.",
+        "Excluded categories are stated boundaries with written reasons; nothing is padded "
+        "into any number, because there is no score to pad.",
         "",
         "*A category being excluded is not a finding about that category. This table states the "
         "denominator so the reader can judge the coverage, which is why it is published rather than "

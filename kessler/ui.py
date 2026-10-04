@@ -337,11 +337,61 @@ def _asr_chart(asr: dict, skip_overall: bool = True, link: str = "#") -> str:
     return "".join(out)
 
 
+# --------------------------------------------------------------------------- white-label (B7)
+
+#: White-label surface (B7): a resubmission under another practice's name renders reports
+#: under that name. Deliberately tiny - a name, an optional logo (URL or data URI), an
+#: optional amber override. The honesty surfaces (the voice guard, the honesty footers, the
+#: evidence rules, the grammar of the number) are NOT brandable: a reseller may change the
+#: name, never the grammar.
+_BRAND: dict | None = None
+_BRAND_ENV_READ = False
+
+
+def set_brand(brand: dict | None) -> None:
+    """Set (or clear) the white-label brand. Closed world; a broken brand fails loudly."""
+    global _BRAND, _BRAND_ENV_READ
+    _BRAND_ENV_READ = True
+    if brand is None:
+        _BRAND = None
+        return
+    if not isinstance(brand, dict):
+        raise ValueError("brand must be an object")
+    unknown = set(brand) - {"name", "logo", "amber"}
+    if unknown:
+        raise ValueError(f"unknown brand key(s): {', '.join(sorted(unknown))}")
+    if not str(brand.get("name", "")).strip():
+        raise ValueError("brand needs a non-empty name")
+    amber = str(brand.get("amber", "")).strip()
+    if amber and not re.fullmatch(r"#[0-9a-fA-F]{6}", amber):
+        raise ValueError("brand amber must be a #rrggbb colour")
+    _BRAND = {"name": str(brand["name"]).strip(),
+              "logo": str(brand.get("logo", "")).strip(),
+              "amber": amber}
+
+
+def current_brand() -> dict | None:
+    """The active brand; KESSLER_BRAND_JSON seeds it once per process."""
+    global _BRAND_ENV_READ
+    if not _BRAND_ENV_READ:
+        import os
+        raw = os.environ.get("KESSLER_BRAND_JSON", "")
+        if raw:
+            set_brand(json.loads(raw))
+        else:
+            _BRAND_ENV_READ = True
+    return _BRAND
+
+
 def masthead(title: str, meta_lines: list[str], command: str) -> str:
     """The console-opening header shared by every surface (D-022's voice, one implementation)."""
+    b = current_brand() or {}
+    _name = b.get("name", "kessler")
+    _logo = (f'<img class="brand-logo" src="{_esc(b.get("logo"))}" alt="">'
+             if b.get("logo") else "")
     return (
         '<header class="masthead">'
-        f'<div class="prompt"><b>kessler</b> {command}</div>'
+        f'<div class="prompt">{_logo}<b>{_esc(_name)}</b> {command}</div>'
         f"<h1><span class='brand'>{_esc(title)}</span></h1>"
         + "".join(f'<div class="meta">{line}</div>' for line in meta_lines)
         + "</header>"
@@ -355,11 +405,18 @@ def page(title: str, head_extra: str, body: str) -> str:
     if body.count('class="nex-note"') > 1:
         raise ValueError("one sticky note per view (Nex enforcement, PLAN-UI-NEX)")
     css = CSS + (NEX_CSS if 'class="nex' in body else "")
+    _b = current_brand() or {}
+    _brand_bits = ""
+    if _b:
+        if _b.get("logo"):
+            _brand_bits += ".brand-logo{height:1em;vertical-align:-0.15em;margin-right:.35em}"
+        if _b.get("amber"):
+            _brand_bits += f":root{{--amber:{_b['amber']};--amber2:{_b['amber']}}}"
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{_esc(title)}</title>"
-        f"<style>{css}</style>{head_extra}</head>"
+        f"<style>{css}{_brand_bits}</style>{head_extra}</head>"
         '<body><div class="grid-bg"></div><main>'
         f"{body}"
         "</main></body></html>"

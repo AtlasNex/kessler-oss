@@ -109,7 +109,8 @@ def render_registry_md(registry: dict) -> str:
         if e["method"] == AUTO_METHOD and e["n"] >= N_FLOOR:
             rate = f"{e['asr'] * 100:.1f}%"
             ci = f"[{e['ci_low'] * 100:.1f}%, {e['ci_high'] * 100:.1f}%]"
-            status = "published"
+            status = ("published" if e["asr"]
+                      else f"published; 0 observed in n={e['n']} attempts")
         else:
             rate = "—"
             ci = "—"
